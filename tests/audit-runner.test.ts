@@ -21,6 +21,17 @@ async function waitForAudit(auditId: string, timeoutMs = 60_000) {
   }
 }
 
+/** Keyword and competitor research run right after the audit, inside the same job. */
+async function waitForStage(auditId: string, stage: "KEYWORDS" | "COMPETITORS", timeoutMs = 60_000) {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    const r = await db.auditRun.findUnique({ where: { auditId_stage: { auditId, stage } } });
+    if (r && r.status !== "PENDING" && r.status !== "RUNNING") return r;
+    if (Date.now() > until) throw new Error(`${stage} still ${r?.status}`);
+    await new Promise((res) => setTimeout(res, 200));
+  }
+}
+
 beforeAll(async () => {
   runnerOptions.allowPrivateNetworks = true;
   site = await startFixtureSite();
@@ -50,7 +61,14 @@ describe("full audit through the job queue", () => {
     const status = Object.fromEntries(runs.map((r) => [r.stage, r.status]));
     expect(status.CRAWL).toBe("COMPLETED");
     expect(status.EVIDENCE_VALIDATION).toBe("COMPLETED");
-    expect(status.KEYWORDS).toBe("SKIPPED");
+    // Keyword ideas come from the services found on the site; with no competitors added, that stage says so.
+    const keywords = await waitForStage(auditId, "KEYWORDS");
+    expect(keywords.status).toBe("COMPLETED");
+    expect(keywords.message).toMatch(/keyword ideas, top \d+ chosen for the proposal/);
+    expect(await db.keyword.count({ where: { prospectId, inProposal: true } })).toBeGreaterThan(0);
+    const competitors = await waitForStage(auditId, "COMPETITORS");
+    expect(competitors.status).toBe("SKIPPED");
+    expect(competitors.message).toMatch(/No competitors added yet/);
     // No GEMINI_API_KEY in tests: AI is skipped, never faked.
     expect(status.AI_ANALYSIS).toBe("SKIPPED");
     expect(status.REPORT).toBe("COMPLETED");

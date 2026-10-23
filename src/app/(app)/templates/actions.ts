@@ -9,7 +9,7 @@ import { renderTemplate } from "@/lib/messaging/templates";
 export type TemplateState = { ok?: boolean; error?: string; fieldErrors?: Record<string, string[] | undefined> } | undefined;
 
 const schema = z.object({
-  channel: z.enum(["EMAIL", "WHATSAPP"]),
+  channel: z.enum(["EMAIL"]),
   name: z.string().trim().min(2, "Name is required").max(80),
   subject: z.string().trim().max(200).optional(),
   body: z.string().trim().min(5, "Write the message").max(5000),
@@ -19,7 +19,6 @@ function check(data: z.infer<typeof schema>): TemplateState | null {
   if (data.channel === "EMAIL" && !data.subject) return { fieldErrors: { subject: ["Email templates need a subject"] } };
   const unknown = [...renderTemplate(`${data.subject ?? ""} ${data.body}`, {}).unknown];
   if (unknown.length) return { fieldErrors: { body: [`Unknown placeholder: ${unknown.map((u) => `{{${u}}}`).join(", ")}`] } };
-  if (data.channel === "WHATSAPP" && data.body.length > 1000) return { fieldErrors: { body: ["Keep WhatsApp messages under 1,000 characters"] } };
   return null;
 }
 

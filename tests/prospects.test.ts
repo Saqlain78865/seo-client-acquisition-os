@@ -35,7 +35,8 @@ describe("workspace bootstrap", () => {
     ]);
     expect(statuses).toBe(12);
     expect(settings).not.toBeNull();
-    expect(templates).toBeGreaterThanOrEqual(2);
+    // Email only: WhatsApp sending was removed.
+    expect(templates).toBeGreaterThanOrEqual(1);
   });
 });
 

@@ -72,11 +72,12 @@ export async function startBulkAuditAction(_: BulkFormState, formData: FormData)
   const session = await requireSession();
   const sites = String(formData.get("sites") ?? "").slice(0, 20_000);
   const name = String(formData.get("name") ?? "");
+  const autoProposal = formData.get("autoProposal") === "on";
   let batchId: string;
   try {
     ({
       batch: { id: batchId },
-    } = await startBulkAudit(session.workspace.id, session.user.id, { name, sites }));
+    } = await startBulkAudit(session.workspace.id, session.user.id, { name, sites, autoProposal }));
   } catch (e) {
     if (e instanceof AuditRequestError) return { error: e.message };
     return { error: withReference("The bulk audit could not be started. Please try again.", await reportError("audits", e)) };

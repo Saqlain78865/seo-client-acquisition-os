@@ -11,6 +11,9 @@ import { Alert, Card, PageHeader, buttonClass, Avatar } from "@/components/ui";
 import { AuditStatusBadge } from "../../status";
 import { AutoRefresh } from "../../[id]/client-bits";
 import { createProposalAction } from "../../../proposals/actions";
+import { batchSendPreview } from "@/lib/messaging/bulk-send";
+import { resolveSender } from "@/lib/messaging/email";
+import { CreateAllProposals, SendAll } from "./send-all";
 
 export const metadata: Metadata = { title: "Bulk audit results" };
 
@@ -45,6 +48,8 @@ export default async function BulkResultsPage({ params }: { params: Promise<{ id
   const { batch, rows, active } = data;
   const skipped = (batch.skipped as { site: string; reason: string }[] | null) ?? [];
   const done = rows.length - active;
+  const [sendRows, sender] = await Promise.all([batchSendPreview(session.workspace.id, id), resolveSender(session.workspace.id)]);
+  const withoutProposal = rows.filter((r) => r.opportunity && !r.proposalId).length;
 
   return (
     <>
@@ -84,6 +89,16 @@ export default async function BulkResultsPage({ params }: { params: Promise<{ id
           </ul>
         </Alert>
       )}
+
+      {active === 0 && withoutProposal > 0 && (
+        <Card className="mb-6 flex flex-wrap items-center gap-3 p-5">
+          <p className="flex-1 text-sm">
+            <span className="font-semibold">{withoutProposal}</span> checked website{withoutProposal === 1 ? " has" : "s have"} no proposal yet.
+          </p>
+          <CreateAllProposals batchId={id} count={withoutProposal} />
+        </Card>
+      )}
+      {active === 0 && sendRows.length > 0 && <SendAll batchId={id} rows={sendRows} senderReady={!!sender} />}
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">

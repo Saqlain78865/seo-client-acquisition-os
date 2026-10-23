@@ -44,7 +44,8 @@ test.describe.serial("Phase 5 messaging journey", () => {
     await page.goto("/integrations");
     await expect(page.getByText("No email account connected yet")).toBeVisible();
     await expect(page.getByText("Not available until GOOGLE_CLIENT_ID")).toBeVisible();
-    await expect(page.getByText("Scanning a QR code only opens a chat")).toBeVisible();
+    // WhatsApp was removed: email (Gmail) is the only sending channel.
+    await expect(page.getByText("WhatsApp Business Platform")).toHaveCount(0);
 
     await page.getByLabel("SMTP server").fill("127.0.0.1");
     await page.getByLabel("Port", { exact: true }).fill(String(SMTP_PORT));
@@ -145,30 +146,18 @@ test.describe.serial("Phase 5 messaging journey", () => {
     await visitor.close();
   });
 
-  test("WhatsApp click-to-chat is recorded as sent only after confirmation; opt-out blocks sending", async ({ page }) => {
+  test("sending is email only, CC/BCC stay tucked away, and opt-out blocks sending", async ({ page }) => {
     await login(page);
-    await openProspect(page);
-    await page.getByLabel("Contact type").selectOption("WHATSAPP");
-    await page.getByLabel("Contact value").fill("+92 300 1234567");
-    await page.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(page.getByText("Contact added")).toBeVisible();
-
     await page.goto("/proposals");
     await page.locator("tbody a").first().click();
     await page.getByRole("link", { name: "Send" }).click();
-    await page.getByRole("tab", { name: "WhatsApp" }).click();
-    await page.getByLabel("WhatsApp number").fill("+92 300 1234567");
-    await page.getByLabel("Message", { exact: true }).fill("Hi, here is the proposal summary for example.com.");
-    // The number was entered by the user, so it is verified and needs no extra confirmation.
-    await expect(page.getByText("I confirm this number is correct")).toHaveCount(0);
-    const popupPromise = page.waitForEvent("popup");
-    await page.getByRole("button", { name: "Open in WhatsApp" }).click();
-    const popup = await popupPromise;
-    expect(popup.url()).toMatch(/^https:\/\/(wa\.me|api\.whatsapp\.com)\//);
-    await popup.close();
-    await page.getByRole("button", { name: "Yes, I sent it" }).click();
-    await expect(page.getByText("Recorded as sent on WhatsApp")).toBeVisible();
-    await expect(page.getByText("WhatsApp (manual)")).toBeVisible();
+    // WhatsApp sending was removed: no channel tabs, only the email form.
+    await expect(page.getByRole("tab", { name: "WhatsApp" })).toHaveCount(0);
+    await expect(page.getByText("Option 1 — Open in WhatsApp")).toHaveCount(0);
+    await expect(page.getByLabel("CC", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: /CC \/ BCC/ }).click();
+    await expect(page.getByLabel("CC", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("BCC", { exact: true })).toBeVisible();
 
     await openProspect(page);
     await page.getByRole("button", { name: "Opt-out / do not contact" }).click();

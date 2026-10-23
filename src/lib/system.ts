@@ -34,11 +34,12 @@ export async function databaseHealthy() {
 
 export async function runHealthChecks(): Promise<HealthCheck[]> {
   const production = process.env.NODE_ENV === "production";
-  return Promise.all([
-    check("database", "Database", async () => {
-      const ms = await databaseHealthy();
-      return { status: ms > 500 ? "warn" : "ok", detail: `Responded in ${ms} ms` };
-    }),
+  const desktop = process.env.SEO_OS_DESKTOP === "1";
+  const database = await check("database", "Database", async () => {
+    const ms = await databaseHealthy();
+    return { status: ms > 500 ? "warn" : "ok", detail: `Responded in ${ms} ms` };
+  });
+  const rest = await Promise.all([
     check("encryption", "Encryption key", async () => {
       // Round-trips a value, which proves the key is present and valid.
       if (decryptSecret(encryptSecret("probe")) !== "probe") throw new Error("Encryption round-trip failed");
@@ -48,12 +49,25 @@ export async function runHealthChecks(): Promise<HealthCheck[]> {
       const raw = process.env.APP_URL?.trim();
       if (!raw) return { status: production ? "fail" : "warn", detail: "APP_URL is not set — share links and Google sign-in need it" };
       const u = new URL(raw);
+      if (desktop) return { status: "ok", detail: `Desktop app on this PC (${u.origin}). Share links only open on this PC — email the PDF to clients.` };
       if (production && u.protocol !== "https:") return { status: "warn", detail: `${u.origin} is not HTTPS` };
       if (production && ["localhost", "127.0.0.1"].includes(u.hostname)) return { status: "warn", detail: `${u.origin} is not reachable by clients` };
       return { status: "ok", detail: u.origin };
     }),
     check("storage", "File storage", async () => ({ status: "ok", detail: `Writable: ${await checkStorageWritable()}` })),
     check("pdf", "PDF / rendering engine", async () => {
+      const channel = process.env.BROWSER_CHANNEL?.trim();
+      if (channel === "msedge") {
+        const edge = ["C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe", "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"];
+        for (const p of edge) {
+          try {
+            await fs.access(p);
+            return { status: "ok", detail: "Microsoft Edge (installed with Windows)" };
+          } catch {
+            // try the next location
+          }
+        }
+      }
       const { chromium } = await import("playwright");
       const exe = chromium.executablePath();
       try {
@@ -72,7 +86,7 @@ export async function runHealthChecks(): Promise<HealthCheck[]> {
       const summary = `${n("QUEUED")} queued, ${n("RUNNING")} running, ${n("FAILED")} failed`;
       if (!w.started) return { status: "warn", detail: `Not started in this process yet · ${summary}` };
       if (stuckMin >= 10) return { status: "warn", detail: `A job has waited ${stuckMin} min · ${summary}` };
-      return { status: n("FAILED") > 0 ? "warn" : "ok", detail: summary };
+      return { status: "ok", detail: n("FAILED") > 0 ? `Running · ${summary} (usually a website that could not be reached — retry or dismiss them below)` : `Running · ${summary}` };
     }),
     check("registration", "Self-registration", async () =>
       process.env.ALLOW_REGISTRATION === "true"
@@ -80,6 +94,7 @@ export async function runHealthChecks(): Promise<HealthCheck[]> {
         : { status: "ok", detail: "Closed — owners add team members from Account & Team" },
     ),
   ]);
+  return [database, ...rest];
 }
 
 // ───────────────────────────── Jobs ─────────────────────────────

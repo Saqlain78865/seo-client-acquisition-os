@@ -7,8 +7,6 @@ import { CURRENCIES } from "../constants";
 import { getFile, putFile } from "../storage";
 import { defaultDeliverables, defaultServices, generateSections, type SourceFinding } from "./generate";
 import { htmlToPdf } from "./pdf";
-import { qrDataUri } from "../messaging/share";
-import { toWaNumber } from "../messaging/whatsapp";
 import { pdfFooterTemplate, renderProposalHtml, type RenderVersion } from "./render";
 import { THEME_KEYS } from "./theme";
 import { PAGE_TYPE_LABELS, type PageType } from "../crawler/classify";
@@ -55,10 +53,9 @@ export async function currentBranding(workspaceId: string): Promise<Branding> {
     email: s?.companyEmail ?? null,
     phone: s?.companyPhone ?? null,
     website: s?.companyWebsite ?? null,
-    whatsapp: s?.consultantWhatsApp ?? null,
+    whatsapp: null,
     logoDataUri,
     brandColor: s?.brandColor ?? null,
-    whatsappQr: s?.consultantWhatsApp && toWaNumber(s.consultantWhatsApp) ? await qrDataUri(`https://wa.me/${toWaNumber(s.consultantWhatsApp)}`) : null,
   };
 }
 

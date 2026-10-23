@@ -36,7 +36,6 @@ export async function getDashboardData(workspaceId: string) {
     prospectsForChart,
     bySource,
     emailByStatus,
-    waByStatus,
     pipeline,
     followUpsThisWeek,
     recentActivity,
@@ -62,7 +61,6 @@ export async function getDashboardData(workspaceId: string) {
     db.prospect.findMany({ where: { workspaceId, createdAt: { gte: chartStart } }, select: { createdAt: true } }),
     db.prospect.groupBy({ by: ["leadSource"], where: { workspaceId }, _count: { _all: true } }),
     db.emailDelivery.groupBy({ by: ["status"], where: { proposal: { workspaceId } }, _count: { _all: true } }),
-    db.whatsAppDelivery.groupBy({ by: ["status"], where: { proposal: { workspaceId } }, _count: { _all: true } }),
     db.prospect.groupBy({ by: ["status", "currency"], where: { workspaceId }, _sum: { estimatedValue: true }, _count: { _all: true } }),
     db.followUp.findMany({
       where: { workspaceId, status: "PENDING", dueAt: { lte: endOfWeek } },
@@ -133,17 +131,11 @@ export async function getDashboardData(workspaceId: string) {
 
   const deliveries = [
     { channel: "Email", accepted: 0, failed: 0, manual: 0 },
-    { channel: "WhatsApp", accepted: 0, failed: 0, manual: 0 },
   ];
   for (const r of emailByStatus) {
     if (r.status === "ACCEPTED") deliveries[0].accepted += r._count._all;
     else if (r.status === "FAILED") deliveries[0].failed += r._count._all;
     else if (r.status === "MANUAL_OPENED") deliveries[0].manual += r._count._all;
-  }
-  for (const r of waByStatus) {
-    if (["ACCEPTED", "SENT", "DELIVERED", "READ"].includes(r.status)) deliveries[1].accepted += r._count._all;
-    else if (r.status === "FAILED") deliveries[1].failed += r._count._all;
-    else if (r.status === "MANUAL_OPENED" || r.status === "MANUAL_SENT") deliveries[1].manual += r._count._all;
   }
 
   return {

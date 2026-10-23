@@ -23,7 +23,6 @@ type ProfileDefaults = {
   companyEmail: string;
   companyPhone: string;
   companyWebsite: string;
-  consultantWhatsApp: string;
   defaultCurrency: string;
   proposalTheme: string;
   brandColor: string;
@@ -56,9 +55,6 @@ export function ProfileForm({ defaults, disabled, logo }: { defaults: ProfileDef
         </Field>
         <Field label="Website" name="companyWebsite" error={e?.companyWebsite}>
           <Input defaultValue={defaults.companyWebsite} placeholder="https://" />
-        </Field>
-        <Field label="Your WhatsApp number" name="consultantWhatsApp" error={e?.consultantWhatsApp} hint="For click-to-chat links and QR codes">
-          <Input defaultValue={defaults.consultantWhatsApp} placeholder="+92…" />
         </Field>
         <Field label="Default proposal currency" name="defaultCurrency" error={e?.defaultCurrency}>
           <Select defaultValue={defaults.defaultCurrency}>

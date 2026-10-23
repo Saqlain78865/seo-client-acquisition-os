@@ -46,7 +46,6 @@ export default async function SettingsPage() {
                 companyEmail: settings?.companyEmail ?? "",
                 companyPhone: settings?.companyPhone ?? "",
                 companyWebsite: settings?.companyWebsite ?? "",
-                consultantWhatsApp: settings?.consultantWhatsApp ?? "",
                 defaultCurrency: settings?.defaultCurrency ?? "USD",
                 proposalTheme: settings?.proposalTheme ?? "navy",
                 brandColor: settings?.brandColor ?? "",
@@ -82,24 +81,6 @@ export default async function SettingsPage() {
                     Remove logo
                   </button>
                 </form>
-              )}
-            </div>
-          </Card>
-          <Card>
-            <CardHeader title="Your WhatsApp QR code" description="Opens a chat with you. Shown in proposals; use it on business cards too." />
-            <div className="space-y-2 p-5 text-sm">
-              {branding.whatsappQr ? (
-                <>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- generated data URI */}
-                  <img src={branding.whatsappQr} alt={`WhatsApp QR code for ${branding.whatsapp}`} className="h-40 w-40 rounded border border-border bg-white p-1" />
-                  <p className="text-muted">{branding.whatsapp}</p>
-                  <a href={branding.whatsappQr} download="whatsapp-qr.png" className="text-primary hover:underline">
-                    Download PNG
-                  </a>
-                  <p className="text-xs text-muted">This QR code only opens a chat with your number. It does not log in to or connect any WhatsApp account.</p>
-                </>
-              ) : (
-                <p className="text-muted">Add your WhatsApp number with the country code (e.g. +92…) in the profile form to generate it.</p>
               )}
             </div>
           </Card>

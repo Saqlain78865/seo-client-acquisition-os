@@ -28,7 +28,7 @@ export function parseSiteList(text: string) {
 }
 
 /** Queues a quick audit for each website. Sites that cannot be reached are reported, not queued. */
-export async function startBulkAudit(workspaceId: string, userId: string, input: { name?: string; sites: string }) {
+export async function startBulkAudit(workspaceId: string, userId: string, input: { name?: string; sites: string; autoProposal?: boolean }) {
   const { urls, invalid } = parseSiteList(input.sites);
   if (urls.length === 0) throw new AuditRequestError("Add at least one website, e.g. example.com.");
   if (urls.length > MAX_BULK_SITES) throw new AuditRequestError(`Up to ${MAX_BULK_SITES} websites per bulk audit (you added ${urls.length}).`);
@@ -39,7 +39,7 @@ export async function startBulkAudit(workspaceId: string, userId: string, input:
   let queued = 0;
   for (const url of urls) {
     try {
-      await startAudit(workspaceId, userId, { websiteUrl: url, currency: (settings?.defaultCurrency ?? "USD") as AuditRequest["currency"] }, { batchId: batch.id, quick: true });
+      await startAudit(workspaceId, userId, { websiteUrl: url, currency: (settings?.defaultCurrency ?? "USD") as AuditRequest["currency"], autoProposal: input.autoProposal ?? false }, { batchId: batch.id, quick: true });
       queued++;
     } catch (e) {
       skipped.push({ site: url, reason: e instanceof AuditRequestError ? e.message : "Could not be queued" });

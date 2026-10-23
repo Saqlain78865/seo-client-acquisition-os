@@ -26,7 +26,7 @@ const QUICK_PAGE_LIMIT = 12;
 /** Test hook: lets the integration tests crawl a local fixture server. Never set in production. */
 export const runnerOptions = { allowPrivateNetworks: false };
 
-async function setStage(auditId: string, stage: StageKey, status: StageStatus, message?: string, output?: unknown) {
+export async function setStage(auditId: string, stage: StageKey, status: StageStatus, message?: string, output?: unknown) {
   const now = new Date();
   await db.auditRun.upsert({
     where: { auditId_stage: { auditId, stage } },
@@ -437,7 +437,8 @@ export async function runAudit(auditId: string) {
         }
         const overview = await Promise.race([
           checkDomain(host, { guard, popularity: false }),
-          new Promise<null>((r) => setTimeout(() => r(null), 45_000)),
+          // The free sources (RDAP, certificate, DNS) can be slow; give them time before skipping.
+          new Promise<null>((r) => setTimeout(() => r(null), 90_000)),
         ]).catch(() => null);
         const answered = overview ? (["registration", "ssl", "email", "tech"] as const).filter((k) => overview[k].ok) : [];
         if (!overview || answered.length === 0) {
@@ -458,11 +459,9 @@ export async function runAudit(auditId: string) {
     );
     const combined = [...allFindings, ...domainExtra].sort((a, b) => b.priority - a.priority);
 
-    for (const [key, msg] of [
-      ["KEYWORDS", "Keyword research needs a keyword data source (CSV import or API) — available in the research module"],
-      ["COMPETITORS", "Competitor research runs separately once competitors are added — available in the research module"],
-    ] as const) {
-      if (!(await stageDone(auditId, key))) await setStage(auditId, key, "SKIPPED", msg);
+    // Keyword and competitor research need the finished audit, so they run right after it (see after.ts).
+    for (const key of ["KEYWORDS", "COMPETITORS"] as const) {
+      if (!(await stageDone(auditId, key))) await setStage(auditId, key, "PENDING", "Runs as soon as the page analysis is finished");
     }
 
     await stage(

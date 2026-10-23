@@ -39,7 +39,6 @@ const profileSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((v) => v || null),
-  consultantWhatsApp: text(40),
   defaultCurrency: z.enum(CURRENCIES),
   proposalTheme: z.enum(THEME_KEYS),
   brandColor: z

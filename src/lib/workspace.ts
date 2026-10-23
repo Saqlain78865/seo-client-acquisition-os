@@ -19,13 +19,6 @@ Best regards,
 {{consultantName}}`,
     isDefault: true,
   },
-  {
-    channel: "WHATSAPP",
-    name: "Proposal — short intro",
-    subject: null,
-    body: `Hi {{clientName}}, this is {{consultantName}}. I reviewed {{websiteUrl}} and prepared an SEO proposal for {{businessName}}. {{auditSummary}} You can view it here: {{proposalLink}}. Happy to answer any questions.`,
-    isDefault: true,
-  },
 ] as const;
 
 /** Creates a workspace with its default settings, pipeline statuses and message templates. */

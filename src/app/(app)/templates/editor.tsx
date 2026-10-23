@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Alert, Badge, Button, Card, Field, Input, Select, Textarea } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, Textarea } from "@/components/ui";
 import { PLACEHOLDERS, renderTemplate, type TemplateVars } from "@/lib/messaging/templates";
 import { deleteTemplateAction, saveTemplateAction, setDefaultTemplateAction } from "./actions";
 
@@ -22,7 +22,7 @@ type T = { id: string; channel: string; name: string; subject: string | null; bo
 
 export function TemplateEditor({ template, onDone }: { template: T | null; onDone?: () => void }) {
   const [state, action, pending] = useActionState(saveTemplateAction.bind(null, template?.id ?? null), undefined);
-  const [channel, setChannel] = useState(template?.channel ?? "EMAIL");
+  const channel = template?.channel ?? "EMAIL";
   const [subject, setSubject] = useState(template?.subject ?? "");
   const [body, setBody] = useState(template?.body ?? "");
   useEffect(() => {
@@ -42,14 +42,8 @@ export function TemplateEditor({ template, onDone }: { template: T | null; onDon
           <Field label="Name" name="name" error={e?.name}>
             <Input defaultValue={template?.name} />
           </Field>
-          <Field label="Channel" name="channel" error={e?.channel}>
-            <Select value={channel} onChange={(ev) => setChannel(ev.target.value)} disabled={!!template}>
-              <option value="EMAIL">Email</option>
-              <option value="WHATSAPP">WhatsApp</option>
-            </Select>
-          </Field>
         </div>
-        {template && <input type="hidden" name="channel" value={channel} />}
+        <input type="hidden" name="channel" value={channel} />
         {channel === "EMAIL" && (
           <Field label="Subject" name="subject" error={e?.subject}>
             <Input value={subject} onChange={(ev) => setSubject(ev.target.value)} />

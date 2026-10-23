@@ -5,10 +5,8 @@ import { geminiModel } from "@/lib/ai/provider";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ForbiddenError, requireRole } from "@/lib/auth";
-import { randomToken } from "@/lib/crypto";
 import { disconnect, getCredentials, recordTest, saveCredentials, type Provider } from "@/lib/integrations";
 import { EmailError, verifySmtp } from "@/lib/messaging/email";
-import { WhatsAppError, testCloudConnection } from "@/lib/messaging/whatsapp";
 import { revokeToken } from "@/lib/messaging/google-oauth";
 import { runPageSpeed } from "@/lib/research/pagespeed";
 
@@ -16,7 +14,7 @@ export type IntegrationState = { ok?: boolean; message?: string; error?: string;
 
 function fail(e: unknown): IntegrationState {
   if (e instanceof ForbiddenError) return { error: "Only owners and admins can manage integrations." };
-  if (e instanceof EmailError || e instanceof WhatsAppError || e instanceof Error) return { error: e.message };
+  if (e instanceof EmailError || e instanceof Error) return { error: e.message };
   return { error: "Something went wrong." };
 }
 
@@ -70,47 +68,6 @@ export async function saveSmtpAction(_: IntegrationState, formData: FormData): P
     await saveCredentials(session.workspace.id, "SMTP", { secret: { user: d.user, pass: d.pass }, config: { host: d.host, port: d.port, secure, fromEmail: d.fromEmail, fromName: d.fromName ?? "" }, accountLabel: d.fromEmail });
     await recordTest(session.workspace.id, "SMTP", true);
     return done(`SMTP connected: ${d.fromEmail}`);
-  } catch (e) {
-    return fail(e);
-  }
-}
-
-// ───────────── WhatsApp ─────────────
-
-const waSchema = z.object({
-  accessToken: z.string().trim().max(1000).optional(),
-  phoneNumberId: z.string().trim().regex(/^\d{6,25}$/, "The Phone Number ID is a long number from WhatsApp Manager → API Setup"),
-  templateName: z.string().trim().regex(/^[a-z0-9_]{1,512}$/, "Template names use lowercase letters, numbers and underscores"),
-  templateLanguage: z.string().trim().min(2).max(10),
-  bodyParams: z.string().max(2000).optional().default(""),
-  headerDocument: z.literal("on").optional(),
-  appSecret: z.string().trim().max(200).optional(),
-});
-
-export async function saveWhatsAppAction(_: IntegrationState, formData: FormData): Promise<IntegrationState> {
-  try {
-    const session = await requireRole("ADMIN");
-    const parsed = waSchema.safeParse(Object.fromEntries(formData));
-    if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
-    const d = parsed.data;
-    const existing = await getCredentials<{ accessToken: string; appSecret?: string }>(session.workspace.id, "WHATSAPP_CLOUD");
-    const accessToken = d.accessToken || existing?.secret.accessToken;
-    if (!accessToken) return { fieldErrors: { accessToken: ["Paste the access token"] } };
-    const label = await testCloudConnection(accessToken, d.phoneNumberId);
-    await saveCredentials(session.workspace.id, "WHATSAPP_CLOUD", {
-      secret: { accessToken, appSecret: d.appSecret || existing?.secret.appSecret || "" },
-      config: {
-        phoneNumberId: d.phoneNumberId,
-        templateName: d.templateName,
-        templateLanguage: d.templateLanguage,
-        bodyParams: d.bodyParams.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 10),
-        headerDocument: d.headerDocument === "on",
-        verifyToken: (existing?.config.verifyToken as string) || randomToken(18),
-      },
-      accountLabel: label,
-    });
-    await recordTest(session.workspace.id, "WHATSAPP_CLOUD", true);
-    return done(`WhatsApp connected: ${label}`);
   } catch (e) {
     return fail(e);
   }
@@ -176,10 +133,6 @@ export async function testConnectionAction(provider: Provider): Promise<Integrat
         const c = await getCredentials<{ user: string; pass: string }>(ws, provider);
         if (!c) return { error: "Not connected." };
         await verifySmtp({ host: c.config.host as string, port: c.config.port as number, secure: !!c.config.secure, user: c.secret.user, pass: c.secret.pass });
-      } else if (provider === "WHATSAPP_CLOUD") {
-        const c = await getCredentials<{ accessToken: string }>(ws, provider);
-        if (!c) return { error: "Not connected." };
-        await testCloudConnection(c.secret.accessToken, c.config.phoneNumberId as string);
       } else {
         return { error: "Re-save the key to test it." };
       }

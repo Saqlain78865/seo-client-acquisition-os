@@ -366,8 +366,8 @@ function sectionExtras(key: string, data: unknown, v: RenderVersion, client: Ren
   }
   if (key === "next_steps") {
     const b = v.branding;
-    const contact = [b.consultantName, b.email, b.phone, b.whatsapp && `WhatsApp ${b.whatsapp}`].filter(Boolean) as string[];
-    return `<div class="cta"><div><p class="big">Let's grow ${escapeHtml(client.businessName)} together.</p>${contact.length ? `<p>${contact.map(escapeHtml).join(" · ")}</p>` : ""}${b.website ? `<p>${link(b.website)}</p>` : ""}</div>${b.whatsappQr ? `<div class="qr"><img src="${escapeHtml(b.whatsappQr)}" alt="WhatsApp QR code"><span>Scan to message us</span></div>` : ""}</div>`;
+    const contact = [b.consultantName, b.email, b.phone].filter(Boolean) as string[];
+    return `<div class="cta"><div><p class="big">Let's grow ${escapeHtml(client.businessName)} together.</p>${contact.length ? `<p>${contact.map(escapeHtml).join(" · ")}</p>` : ""}${b.website ? `<p>${link(b.website)}</p>` : ""}</div></div>`;
   }
   if (key === "acceptance") {
     const sig = (who: string, name: string) =>

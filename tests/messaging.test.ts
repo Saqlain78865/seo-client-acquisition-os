@@ -11,6 +11,7 @@ import { renderTemplate, summariseFindings } from "@/lib/messaging/templates";
 import { clickToChatUrl, mapGraphError, parseStatusWebhook, toWaNumber, verifyWebhookSignature } from "@/lib/messaging/whatsapp";
 import { createShareLink, recordShareView, resolveShareToken, respondToProposal, revokeShareLink } from "@/lib/messaging/share";
 import { listNotifications, markNotificationsRead } from "@/lib/notifications";
+import { batchSendPreview, sendBatchProposals } from "@/lib/messaging/bulk-send";
 import { applyWhatsAppStatuses, confirmClickToChatSent, loadComposeContext, openClickToChat, sendProposalEmail, sendWhatsAppCloud, SendError, type EmailSendInput } from "@/lib/messaging/service";
 
 describe("templates", () => {
@@ -157,6 +158,43 @@ describe("sending (database + local SMTP server)", () => {
     expect(ok.delivery.id).toBe(d.id);
     expect(ok.delivery.attempts).toBe(2);
   }, 60_000);
+
+  it("bulk send: sends every ready proposal of a batch once, and skips the ones without an email", async () => {
+    await saveCredentials(workspaceId, "SMTP", { secret: { user: "me@nova.example", pass: "right-password" } });
+    const batch = await db.auditBatch.create({ data: { workspaceId, name: "Bulk send test", createdById: userId } });
+    const link = async (prospectId: string, proposalId: string) => {
+      const audit = await db.websiteAudit.create({ data: { workspaceId, prospectId, inputUrl: "https://x.example", normalizedUrl: "https://x.example/", status: "COMPLETED", batchId: batch.id } });
+      await db.proposal.update({ where: { id: proposalId }, data: { auditId: audit.id } });
+    };
+    const a = await newProposal("one@client.example", false);
+    const b = await newProposal("two@client.example", false);
+    const noEmail = await createProspect(workspaceId, userId, { businessName: "No Mail Co", websiteUrl: `nomail${Date.now()}.example`, currency: "USD" });
+    const c = await createProposal(workspaceId, userId, { prospectId: noEmail.id });
+    await link(a.prospect.id, a.proposal.id);
+    await link(b.prospect.id, b.proposal.id);
+    await link(noEmail.id, c.id);
+
+    const preview = await batchSendPreview(workspaceId, batch.id);
+    expect(preview).toHaveLength(3);
+    expect(preview.find((r) => r.proposalId === c.id)!.problem).toMatch(/No email address/);
+    const ready = preview.filter((r) => !r.problem);
+    expect(ready.map((r) => r.to).sort()).toEqual(["one@client.example", "two@client.example"]);
+
+    const before = received.length;
+    const results = await sendBatchProposals(workspaceId, userId, batch.id, preview.map((r) => r.proposalId));
+    expect(results.filter((r) => r.ok)).toHaveLength(2);
+    expect(results.find((r) => r.proposalId === c.id)).toMatchObject({ ok: false });
+    expect(received.length).toBe(before + 2);
+    expect(received.at(-1)).toContain("Content-Type: application/pdf");
+
+    // Running it again sends nothing twice.
+    const again = await sendBatchProposals(workspaceId, userId, batch.id, ready.map((r) => r.proposalId));
+    expect(again.every((r) => !r.ok && r.message === "Already sent")).toBe(true);
+    expect(received.length).toBe(before + 2);
+    // Proposals from another batch or workspace are ignored.
+    const other = await newProposal("other@client.example");
+    expect(await sendBatchProposals(workspaceId, userId, batch.id, [other.proposal.id])).toEqual([]);
+  }, 120_000);
 
   it("share links lock the version, expire and can be revoked", async () => {
     const { proposal } = await newProposal("share@client.example");

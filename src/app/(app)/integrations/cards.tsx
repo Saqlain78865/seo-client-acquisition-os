@@ -3,9 +3,9 @@
 import { useActionState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Alert, Button, Field, Input, Textarea } from "@/components/ui";
+import { Alert, Button, Field, Input } from "@/components/ui";
 import type { Provider } from "@/lib/integrations";
-import { disconnectAction, saveApiKeyAction, saveGmailSmtpAction, saveSmtpAction, saveWhatsAppAction, testConnectionAction, type IntegrationState } from "./actions";
+import { disconnectAction, saveApiKeyAction, saveGmailSmtpAction, saveSmtpAction, testConnectionAction, type IntegrationState } from "./actions";
 
 function useFeedback(state: IntegrationState) {
   useEffect(() => {
@@ -77,41 +77,6 @@ export function SmtpForm({ connected, config, disabled }: { connected: boolean; 
           <input type="checkbox" name="secure" defaultChecked={!!config.secure} className="h-4 w-4" /> Use SSL/TLS from the start (usually port 465)
         </label>
         <SubmitRow pending={pending} label="Connect SMTP" connected={connected} />
-      </fieldset>
-    </form>
-  );
-}
-
-export function WhatsAppForm({ connected, config, disabled }: { connected: boolean; config: Record<string, unknown>; disabled: boolean }) {
-  const [state, action, pending] = useActionState(saveWhatsAppAction, undefined);
-  useFeedback(state);
-  const e = state?.fieldErrors;
-  return (
-    <form action={action} className="grid gap-3 sm:grid-cols-2" noValidate>
-      {state?.error && <Alert tone="danger" className="sm:col-span-2">{state.error}</Alert>}
-      <fieldset disabled={disabled} className="contents">
-        <Field label="Permanent access token" name="accessToken" id="wa-accessToken" error={e?.accessToken} hint={connected ? "Saved — paste a new one only to replace it" : "System User token from Meta Business Settings"} className="sm:col-span-2">
-          <Input type="password" autoComplete="off" />
-        </Field>
-        <Field label="Phone Number ID" name="phoneNumberId" id="wa-phoneNumberId" error={e?.phoneNumberId}>
-          <Input defaultValue={(config.phoneNumberId as string) ?? ""} inputMode="numeric" />
-        </Field>
-        <Field label="App secret (for delivery updates)" name="appSecret" id="wa-appSecret" error={e?.appSecret} hint="Meta App → Settings → Basic">
-          <Input type="password" autoComplete="off" />
-        </Field>
-        <Field label="Approved template name" name="templateName" id="wa-templateName" error={e?.templateName}>
-          <Input defaultValue={(config.templateName as string) ?? ""} placeholder="seo_proposal_intro" />
-        </Field>
-        <Field label="Template language code" name="templateLanguage" id="wa-templateLanguage" error={e?.templateLanguage}>
-          <Input defaultValue={(config.templateLanguage as string) ?? "en"} />
-        </Field>
-        <Field label="Template variables {{1}}, {{2}}… (one per line)" name="bodyParams" id="wa-bodyParams" error={e?.bodyParams} hint="Use placeholders, e.g. {{clientName}} then {{businessName}}" className="sm:col-span-2">
-          <Textarea rows={3} defaultValue={((config.bodyParams as string[]) ?? ["{{clientName}}", "{{businessName}}"]).join("\n")} />
-        </Field>
-        <label className="flex items-center gap-2 text-sm sm:col-span-2">
-          <input type="checkbox" name="headerDocument" defaultChecked={!!config.headerDocument} className="h-4 w-4" /> The template has a document header (the proposal PDF is attached via its share link)
-        </label>
-        <SubmitRow pending={pending} label="Connect WhatsApp" connected={connected} />
       </fieldset>
     </form>
   );

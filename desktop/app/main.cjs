@@ -133,6 +133,7 @@ async function startServer() {
       // Audits, screenshots and PDFs use Microsoft Edge, which every Windows 10/11 PC has.
       BROWSER_CHANNEL: cfg.browserChannel ?? "msedge",
       NEXT_TELEMETRY_DISABLED: "1",
+      SEO_OS_DESKTOP: "1",
       SEO_OS_PARENT_PID: String(process.pid),
     },
   });

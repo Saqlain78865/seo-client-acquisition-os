@@ -1,13 +1,11 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import { CheckCircle2, CircleDashed, ExternalLink, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, XCircle } from "lucide-react";
 import { hasRole, requireSession } from "@/lib/auth";
 import { listConnections, type ConnectionView, type Provider } from "@/lib/integrations";
 import { googleOAuthConfigured, redirectUri } from "@/lib/messaging/google-oauth";
-import { appUrl } from "@/lib/messaging/share";
 import { formatDate } from "@/lib/utils";
 import { Alert, Badge, Card, CardHeader, buttonClass } from "@/components/ui";
-import { ApiKeyForm, ConnectionButtons, GmailSmtpForm, SmtpForm, WhatsAppForm } from "./cards";
+import { ApiKeyForm, ConnectionButtons, GmailSmtpForm, SmtpForm } from "./cards";
 
 export const metadata: Metadata = { title: "Integrations" };
 
@@ -79,7 +77,6 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const c = await listConnections(session.workspace.id);
   const canEdit = hasRole(session, "ADMIN");
   const anyEmail = ["GMAIL_OAUTH", "GMAIL_SMTP", "SMTP"].some((p) => c[p as Provider].hasSecret && c[p as Provider].status === "CONNECTED");
-  const webhookUrl = `${appUrl()}/api/webhooks/whatsapp`;
 
   return (
     <>
@@ -147,53 +144,6 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
         <IntegrationCard title="Other email provider (SMTP)" c={c.SMTP} canEdit={canEdit} capabilities={["Send proposal emails from any mailbox that supports SMTP (Outlook, Zoho, cPanel…)"]} steps={<p>Use the SMTP details from your email provider&apos;s help pages.</p>}>
           <SmtpForm connected={c.SMTP.hasSecret} config={c.SMTP.config} disabled={!canEdit} />
-        </IntegrationCard>
-      </div>
-
-      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-muted">WhatsApp</h2>
-      <div className="space-y-4">
-        <Card className="p-5 text-sm">
-          <p className="font-medium">Click-to-chat — always available, no setup</p>
-          <p className="mt-1 text-muted">
-            Opens WhatsApp on your phone or computer with the message ready; you press Send yourself. Add your own number in{" "}
-            <Link href="/settings" className="text-primary underline">
-              Settings
-            </Link>{" "}
-            to get a QR code for proposals and business cards. Scanning a QR code only opens a chat — it does not connect WhatsApp to this app.
-          </p>
-        </Card>
-        <IntegrationCard
-          title="WhatsApp Business Platform (official Cloud API) — optional"
-          c={c.WHATSAPP_CLOUD}
-          canEdit={canEdit}
-          capabilities={["Send an approved template message from your business number", "Attach the proposal PDF (template with a document header)", "Delivery and read updates via webhook"]}
-          steps={
-            <ol className="list-decimal space-y-1 pl-5">
-              <li>Meta Business portfolio → developers.facebook.com → create an app → add WhatsApp.</li>
-              <li>Register your business phone number (it cannot stay on the normal WhatsApp app at the same time).</li>
-              <li>Copy the Phone Number ID from WhatsApp → API Setup.</li>
-              <li>Business Settings → System users → generate a permanent token with whatsapp_business_messaging and whatsapp_business_management.</li>
-              <li>WhatsApp Manager → Message templates → create and get approval for a proposal template.</li>
-              <li>
-                Webhook (needs a public HTTPS address): callback URL <code className="break-all text-xs">{webhookUrl}</code>
-                {typeof c.WHATSAPP_CLOUD.config.verifyToken === "string" && (
-                  <>
-                    , verify token <code className="break-all text-xs">{c.WHATSAPP_CLOUD.config.verifyToken}</code>
-                  </>
-                )}
-                ; subscribe to “messages”.
-              </li>
-              <li>
-                Meta charges per conversation —{" "}
-                <a className="text-primary underline" href="https://developers.facebook.com/docs/whatsapp/pricing" target="_blank" rel="noopener noreferrer">
-                  pricing <ExternalLink className="inline h-3 w-3" />
-                </a>
-                .
-              </li>
-            </ol>
-          }
-        >
-          <WhatsAppForm connected={c.WHATSAPP_CLOUD.hasSecret} config={c.WHATSAPP_CLOUD.config} disabled={!canEdit} />
         </IntegrationCard>
       </div>
 

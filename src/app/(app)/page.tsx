@@ -159,7 +159,7 @@ export default async function OverviewPage() {
         </Card>
 
         <Card className="reveal">
-          <CardHeader title="Proposal delivery by channel" description="Provider acceptance, not read receipts" />
+          <CardHeader title="Proposal emails" description="Accepted by Gmail for delivery — not read receipts" />
           <div className="p-4">
             {d.deliveries.every((x) => x.accepted + x.failed + x.manual === 0) ? (
               <EmptyState title="Nothing sent yet" />

@@ -6,8 +6,9 @@ import { logger } from "../log";
 const log = logger("jobs");
 
 /**
- * Small database-backed job queue (no Redis needed). Jobs survive restarts; a worker claims one
- * job at a time with a conditional update, so two workers never run the same job.
+ * Small database-backed job queue (no Redis needed). Jobs survive restarts; each job is claimed
+ * with a conditional update, so it never runs twice. Up to JOB_CONCURRENCY jobs (default 3) run at
+ * the same time — a bulk audit of 10 websites no longer waits for each site in turn.
  */
 
 export type JobHandler = (payload: Record<string, unknown>, job: { id: string; attempts: number; correlationId: string | null }) => Promise<void>;
@@ -33,13 +34,17 @@ async function claimNext() {
     where: { status: "RUNNING", lockedAt: { lt: new Date(Date.now() - STALE_LOCK_MS) } },
     data: { status: "QUEUED", lockedAt: null, lastError: "Worker stopped unexpectedly; job re-queued" },
   });
-  const candidate = await db.backgroundJob.findFirst({ where: { status: "QUEUED", runAfter: { lte: new Date() } }, orderBy: { createdAt: "asc" } });
-  if (!candidate) return null;
-  const { count } = await db.backgroundJob.updateMany({
-    where: { id: candidate.id, status: "QUEUED" },
-    data: { status: "RUNNING", lockedAt: new Date(), attempts: { increment: 1 } },
-  });
-  return count === 1 ? { ...candidate, attempts: candidate.attempts + 1 } : null;
+  // Parallel workers may pick the same job; the loser simply tries the next one.
+  for (let tries = 0; tries < 5; tries++) {
+    const candidate = await db.backgroundJob.findFirst({ where: { status: "QUEUED", runAfter: { lte: new Date() } }, orderBy: { createdAt: "asc" } });
+    if (!candidate) return null;
+    const { count } = await db.backgroundJob.updateMany({
+      where: { id: candidate.id, status: "QUEUED" },
+      data: { status: "RUNNING", lockedAt: new Date(), attempts: { increment: 1 } },
+    });
+    if (count === 1) return { ...candidate, attempts: candidate.attempts + 1 };
+  }
+  return null;
 }
 
 async function runOne(): Promise<boolean> {
@@ -73,27 +78,40 @@ async function runOne(): Promise<boolean> {
   return true;
 }
 
-const state = globalThis as unknown as { __jobWorker?: { running: boolean; timer?: NodeJS.Timeout } };
+const state = globalThis as unknown as { __jobWorker?: { running: number; timer?: NodeJS.Timeout } };
 
-/** Processes queued jobs one after another until the queue is empty. Safe to call repeatedly. */
+function maxParallel() {
+  const n = Number(process.env.JOB_CONCURRENCY);
+  return Number.isInteger(n) && n >= 1 ? Math.min(n, 6) : 3;
+}
+
+/** Fills the free worker slots; each slot processes jobs until the queue is empty. Safe to call repeatedly. */
 export async function kickWorker() {
-  state.__jobWorker ??= { running: false };
-  if (state.__jobWorker.running) return;
-  state.__jobWorker.running = true;
-  try {
-    while (await runOne()) {
-      // keep draining
-    }
-  } catch (e) {
-    log.error("worker error", { err: e });
-  } finally {
-    state.__jobWorker.running = false;
+  state.__jobWorker ??= { running: 0 };
+  const w = state.__jobWorker;
+  const slots: Promise<void>[] = [];
+  while (w.running < maxParallel()) {
+    w.running++;
+    slots.push(
+      (async () => {
+        try {
+          while (await runOne()) {
+            // keep draining
+          }
+        } catch (e) {
+          log.error("worker error", { err: e });
+        } finally {
+          w.running--;
+        }
+      })(),
+    );
   }
+  await Promise.all(slots);
 }
 
 /** Polls for jobs (delayed retries, jobs queued by other processes). Started once per server process. */
 export function startWorker(intervalMs = 5000) {
-  state.__jobWorker ??= { running: false };
+  state.__jobWorker ??= { running: 0 };
   if (state.__jobWorker.timer) return;
   state.__jobWorker.timer = setInterval(() => void kickWorker(), intervalMs);
   state.__jobWorker.timer.unref?.();
@@ -102,5 +120,5 @@ export function startWorker(intervalMs = 5000) {
 
 /** For the System page: whether this server process has started its worker loop. */
 export function workerStatus() {
-  return { started: !!state.__jobWorker?.timer, busy: !!state.__jobWorker?.running };
+  return { started: !!state.__jobWorker?.timer, busy: (state.__jobWorker?.running ?? 0) > 0 };
 }

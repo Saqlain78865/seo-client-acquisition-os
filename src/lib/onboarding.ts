@@ -20,6 +20,6 @@ export async function gettingStarted(workspaceId: string): Promise<ChecklistStep
     { key: "ai", title: "Add a free Gemini key", description: "Optional: clearer, client-friendly wording in audits and proposals.", href: "/integrations", cta: "Add key", done: !!gemini, optional: true },
     { key: "audit", title: "Audit your first website", description: "Just paste a website address — the proposal can be drafted automatically.", href: "/audits/new", cta: "Start audit", done: audits > 0 },
     { key: "proposal", title: "Review your first proposal", description: "Check the draft, adjust anything you like and mark it ready.", href: "/proposals", cta: "View proposals", done: proposals > 0 },
-    { key: "send", title: "Send it to the client", description: "Email, WhatsApp or a share link — you will see when they open or accept it.", href: "/proposals", cta: "Send proposal", done: sent > 0 },
+    { key: "send", title: "Send it to the client", description: "Email it with the PDF attached, straight from your Gmail.", href: "/proposals", cta: "Send proposal", done: sent > 0 },
   ];
 }

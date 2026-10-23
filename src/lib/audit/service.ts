@@ -93,8 +93,10 @@ export async function retryAudit(workspaceId: string, auditId: string) {
   // Downstream stages depend on the retried ones, so they are recomputed too.
   const order: string[] = AUDIT_STAGES.map((s) => s.key);
   const runs = await db.auditRun.findMany({ where: { auditId } });
-  const firstPending = Math.min(...runs.filter((r) => r.status === "PENDING").map((r) => order.indexOf(r.stage)), order.length);
-  const downstream = order.slice(firstPending).filter((k) => !["KEYWORDS", "COMPETITORS"].includes(k));
+  // Keyword and competitor research run after the audit (after.ts) and never invalidate other stages.
+  const research = ["KEYWORDS", "COMPETITORS"];
+  const firstPending = Math.min(...runs.filter((r) => r.status === "PENDING" && !research.includes(r.stage)).map((r) => order.indexOf(r.stage)), order.length);
+  const downstream = order.slice(firstPending).filter((k) => !research.includes(k));
   await db.auditRun.updateMany({ where: { auditId, stage: { in: downstream } }, data: { status: "PENDING", message: null } });
   await db.websiteAudit.update({ where: { id: auditId }, data: { status: "QUEUED", completedAt: null } });
   await enqueueJob(workspaceId, JOB_TYPES.AUDIT_RUN, { auditId });

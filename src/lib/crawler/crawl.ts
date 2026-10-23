@@ -39,6 +39,8 @@ export type CrawlResult = {
 export type CrawlOptions = GuardOptions & {
   pageLimit: number;
   delayMs: number;
+  /** Pages fetched at the same time (default 4, at most 8); 1 when robots.txt sets a crawl delay. */
+  concurrency?: number;
   /** "offers": spend a small page budget on service/tour pages first (competitor checks). */
   focus?: "offers";
   maxRenders?: number;
@@ -148,17 +150,17 @@ export async function crawlSite(startUrl: string, options: CrawlOptions): Promis
   enqueue(homepageUrl, "start", null, 1000);
   for (const s of sitemaps.urls.slice(0, 500)) enqueue(s, "sitemap", null, 10);
 
-  let limitReached = false;
-  while (queue.length) {
-    if (pages.length >= options.pageLimit) {
-      limitReached = true;
-      break;
-    }
-    queue.sort((a, b) => b.priority - a.priority);
-    const next = queue.shift()!;
-    await options.onProgress?.({ crawled: pages.length, found: queued.size, current: next.url });
-    if (pages.length > 0) await sleep(delay);
+  // Pages are fetched a few at a time, with a pause between batches. A site that asks for a
+  // crawl delay in robots.txt is crawled one page at a time, as before.
+  const concurrency = robots.crawlDelaySec ? 1 : Math.max(1, Math.min(options.concurrency ?? 4, 8));
+  let renderChain: Promise<unknown> = Promise.resolve();
+  const renderOne = <T>(fn: () => Promise<T>) => {
+    const run = renderChain.then(fn, fn);
+    renderChain = run.catch(() => null);
+    return run.catch(() => null);
+  };
 
+  const crawlOne = async (next: (typeof queue)[number]): Promise<CrawledRecord> => {
     const record: CrawledRecord = {
       url: next.url,
       finalUrl: null,
@@ -195,7 +197,8 @@ export async function crawlSite(startUrl: string, options: CrawlOptions): Promis
         record.rawWordCount = page.wordCount;
         if (looksClientRendered(page) && renders < (options.maxRenders ?? 5)) {
           renders++;
-          const r = await renderPage(res.finalUrl, guard).catch(() => null);
+          // One headless browser at a time, even when pages are fetched in parallel.
+          const r = await renderOne(() => renderPage(res.finalUrl, guard));
           if (r) {
             const renderedPage = extractPage(r.html, r.finalUrl);
             if (renderedPage.wordCount > page.wordCount) {
@@ -216,7 +219,21 @@ export async function crawlSite(startUrl: string, options: CrawlOptions): Promis
     } catch (e) {
       record.error = e instanceof BlockedUrlError ? `Blocked: ${e.message}` : e instanceof FetchError ? e.message : "Unexpected error while fetching";
     }
-    pages.push(record);
+    return record;
+  };
+
+  let limitReached = false;
+  while (queue.length) {
+    if (pages.length >= options.pageLimit) {
+      limitReached = true;
+      break;
+    }
+    queue.sort((a, b) => b.priority - a.priority);
+    const batch = queue.splice(0, Math.min(concurrency, options.pageLimit - pages.length));
+    await options.onProgress?.({ crawled: pages.length, found: queued.size, current: batch[0].url });
+    if (pages.length > 0) await sleep(delay);
+    // Records keep the order the pages were taken from the queue.
+    pages.push(...(await Promise.all(batch.map(crawlOne))));
   }
   await options.onProgress?.({ crawled: pages.length, found: queued.size, current: "" });
 
