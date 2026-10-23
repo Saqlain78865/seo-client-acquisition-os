@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Desktop app build output (desktop/build.mjs, electron-builder).
+    "desktop/build/**",
+    "desktop/dist/**",
+    "desktop/node_modules/**",
   ]),
 ]);
 

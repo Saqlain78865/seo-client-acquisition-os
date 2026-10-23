@@ -53,3 +53,9 @@ next-env.d.ts
 
 # local backups (contain client data)
 /backups
+
+# desktop app build output
+/desktop/node_modules
+/desktop/build
+/desktop/dist
+/desktop/app/icon.png

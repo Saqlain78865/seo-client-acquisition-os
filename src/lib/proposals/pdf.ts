@@ -1,4 +1,5 @@
 import "server-only";
+import { launchChromium } from "../crawler/browser";
 
 export class PdfError extends Error {}
 
@@ -15,7 +16,7 @@ export async function htmlToPdf(html: string, footerTemplate: string): Promise<B
   }
   let browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await launchChromium(chromium, { headless: true });
   } catch (e) {
     throw new PdfError(`Could not start the PDF engine: ${(e as Error).message.split("\n")[0]}. Run: npx playwright install chromium`);
   }

@@ -34,6 +34,8 @@ const nextConfig: NextConfig = {
   // The app is almost entirely per-user, database-backed data, so we use classic
   // request-time rendering instead of Cache Components.
   poweredByHeader: false,
+  // The desktop app ships a self-contained server (see desktop/build.mjs).
+  ...(process.env.NEXT_STANDALONE === "1" ? { output: "standalone" as const } : {}),
   // Logo uploads are capped at 1 MB in the action; leave room for multipart overhead.
   experimental: { serverActions: { bodySizeLimit: "1.2mb" } },
   serverExternalPackages: ["better-sqlite3", "@prisma/adapter-better-sqlite3", "playwright", "playwright-core"],

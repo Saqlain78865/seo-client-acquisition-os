@@ -1,0 +1,33 @@
+appId: com.seoacquisitionos.desktop
+productName: SEO Acquisition OS
+copyright: Copyright © 2026 Saqlain Nazir
+directories:
+  app: app
+  output: dist
+  buildResources: assets
+asar: true
+afterPack: after-pack.cjs
+# The self-contained server, its Node runtime and the database migrations sit next to the app.
+extraResources:
+  # Dot-folders such as .next are listed explicitly; node_modules is added by after-pack.cjs.
+  - from: build/server
+    to: server
+    filter: ["**/*", "**/.*", "**/.*/**"]
+  - from: build/node
+    to: node
+  - from: build/migrations
+    to: migrations
+win:
+  target: nsis
+  icon: assets/icon.png
+  executableName: SEO Acquisition OS
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: SEO Acquisition OS
+  # Keep the user's data (database, PDFs, settings) when the app is uninstalled or updated.
+  deleteAppDataOnUninstall: false
+artifactName: SEO-Acquisition-OS-Setup-${version}.${ext}

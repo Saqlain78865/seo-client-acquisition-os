@@ -1,0 +1,15 @@
+{
+  "name": "seo-acquisition-os-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Windows desktop app for SEO Client Acquisition OS",
+  "scripts": {
+    "prepare-app": "node build.mjs",
+    "start": "electron app",
+    "dist": "node build.mjs && electron-builder --win nsis -c.directories.output=%LOCALAPPDATA%/seo-os-desktop-build"
+  },
+  "devDependencies": {
+    "electron": "45.0.0",
+    "electron-builder": "26.15.3"
+  }
+}

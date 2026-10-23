@@ -1,0 +1,8 @@
+{
+  "name": "seo-acquisition-os",
+  "productName": "SEO Acquisition OS",
+  "version": "0.1.0",
+  "description": "Website audit, proposals and client work for SEO consultants",
+  "author": "Saqlain Nazir",
+  "main": "main.cjs"
+}

@@ -1,3 +1,4 @@
+import { launchChromium } from "./browser";
 import { assertPublicHost, assertUrlShape, type GuardOptions } from "./network-guard";
 import { CRAWLER_USER_AGENT } from "./safe-fetch";
 
@@ -49,7 +50,7 @@ export async function captureScreenshots(targets: ShotTarget[], guard: GuardOpti
   } catch {
     return targets.map(() => null);
   }
-  const browser = await chromium.launch({ headless: true, args: ["--disable-dev-shm-usage", "--no-first-run"] });
+  const browser = await launchChromium(chromium, { headless: true, args: ["--disable-dev-shm-usage", "--no-first-run"] });
   const hostChecks = new Map<string, Promise<boolean>>();
   const allowed = (url: string) => {
     try {

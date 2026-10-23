@@ -1,3 +1,4 @@
+import { launchChromium } from "./browser";
 import { assertPublicHost, assertUrlShape, type GuardOptions } from "./network-guard";
 import { CRAWLER_USER_AGENT } from "./safe-fetch";
 
@@ -16,7 +17,7 @@ export async function renderPage(url: string, guard: GuardOptions, timeoutMs = 2
   } catch {
     return null; // browser rendering not installed — caller records the page as not rendered
   }
-  const browser = await chromium.launch({ headless: true, args: ["--disable-dev-shm-usage", "--no-first-run"] });
+  const browser = await launchChromium(chromium, { headless: true, args: ["--disable-dev-shm-usage", "--no-first-run"] });
   try {
     const context = await browser.newContext({
       userAgent: CRAWLER_USER_AGENT,
