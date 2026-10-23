@@ -1,0 +1,309 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens. Light theme: indigo primary with a violet accent on soft, cool neutrals. */
+:root,
+.theme-light {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-2: #f1f4fa;
+  --border: #e3e8f1;
+  --text: #0d1730;
+  --text-muted: #5b6884;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-soft: #eef0ff;
+  --accent: #8b5cf6;
+  --navy: #0b1130;
+  --navy-2: #171d4a;
+  --success: #15803d;
+  --success-soft: #e8f7ee;
+  --warning: #b45309;
+  --warning-soft: #fdf4e3;
+  --danger: #c0262d;
+  --danger-soft: #fdeded;
+  --info: #0369a1;
+  --info-soft: #e6f3fb;
+  --ring: #6366f1;
+  --shadow-card-v: 0 1px 2px rgb(16 24 40 / 0.04), 0 2px 6px -1px rgb(16 24 40 / 0.05);
+  --shadow-lift-v: 0 2px 4px rgb(16 24 40 / 0.04), 0 14px 32px -10px rgb(49 46 129 / 0.2);
+  --glow-1: rgb(99 102 241 / 0.09);
+  --glow-2: rgb(139 92 246 / 0.07);
+}
+
+.dark {
+  --bg: #080c1c;
+  --surface: #0f1530;
+  --surface-2: #161e3d;
+  --border: #232d52;
+  --text: #e8ecf8;
+  --text-muted: #9aa5c4;
+  --primary: #6366f1;
+  --primary-hover: #7c7ff7;
+  --primary-soft: #1c2152;
+  --accent: #a78bfa;
+  --navy: #060918;
+  --navy-2: #10153a;
+  --success: #4ade80;
+  --success-soft: #0f2e20;
+  --warning: #fbbf24;
+  --warning-soft: #33270f;
+  --danger: #f87171;
+  --danger-soft: #3a1719;
+  --info: #38bdf8;
+  --info-soft: #0d2b3d;
+  --ring: #818cf8;
+  --shadow-card-v: 0 1px 2px rgb(0 0 0 / 0.3), 0 0 0 1px rgb(255 255 255 / 0.02);
+  --shadow-lift-v: 0 18px 40px -12px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(129 140 248 / 0.15);
+  --glow-1: rgb(99 102 241 / 0.14);
+  --glow-2: rgb(167 139 250 / 0.08);
+}
+
+/* Public pages (the client's proposal view) always use the light theme. */
+.theme-light {
+  color-scheme: light;
+  color: var(--text);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-navy: var(--navy);
+  --color-navy-2: var(--navy-2);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-ring: var(--ring);
+  --shadow-card: var(--shadow-card-v);
+  --shadow-lift: var(--shadow-lift-v);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+@theme {
+  --animate-rise: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-pop: pop 0.16s ease-out both;
+  --animate-fade: fade 0.3s ease-out both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Soft colour glows behind the app; fixed so they stay put while content scrolls. */
+.app-backdrop {
+  background:
+    radial-gradient(70rem 36rem at 100% -10%, var(--glow-1), transparent 60%),
+    radial-gradient(50rem 30rem at -10% 110%, var(--glow-2), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* Page content rises in, child by child. */
+.page-enter > * {
+  animation: var(--animate-rise);
+}
+.page-enter > *:nth-child(2) {
+  animation-delay: 40ms;
+}
+.page-enter > *:nth-child(3) {
+  animation-delay: 80ms;
+}
+.page-enter > *:nth-child(n + 4) {
+  animation-delay: 120ms;
+}
+.stagger > * {
+  animation: var(--animate-rise);
+}
+.stagger > *:nth-child(2) { animation-delay: 30ms; }
+.stagger > *:nth-child(3) { animation-delay: 60ms; }
+.stagger > *:nth-child(4) { animation-delay: 90ms; }
+.stagger > *:nth-child(5) { animation-delay: 120ms; }
+.stagger > *:nth-child(6) { animation-delay: 150ms; }
+.stagger > *:nth-child(7) { animation-delay: 180ms; }
+.stagger > *:nth-child(8) { animation-delay: 210ms; }
+.stagger > *:nth-child(n + 9) { animation-delay: 240ms; }
+
+/* Tables inside cards: calmer header and row hover everywhere. */
+table thead {
+  letter-spacing: 0.02em;
+}
+tbody tr {
+  transition: background-color 0.15s ease;
+}
+tbody tr:hover {
+  background-color: color-mix(in srgb, var(--primary) 4%, transparent);
+}
+thead th {
+  font-weight: 600;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+/* Thin, theme-aware scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 35%, transparent) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ───────────── Dashboard reel (hero-reel.tsx) ───────────── */
+@property --reel-n {
+  syntax: "<integer>";
+  inherits: false;
+  initial-value: 0;
+}
+.reel {
+  --reel-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reel[data-paused="true"] *,
+.reel[data-paused="true"] *::after {
+  animation-play-state: paused !important;
+}
+.reel-grid {
+  background-image: linear-gradient(rgb(255 255 255) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+.reel-orb { animation: reel-orb 9s ease-in-out infinite alternate; }
+.reel-in { animation: reel-in 0.7s var(--reel-ease) both; }
+.reel-rise { animation: reel-rise 0.6s var(--reel-ease) both; }
+.reel-slide { animation: reel-slide 0.7s var(--reel-ease) both; }
+.reel-fill { width: 0; animation: reel-fill 3s linear forwards; }
+.reel-type {
+  display: inline-block;
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  animation: reel-type 1.3s steps(17) 0.35s forwards;
+}
+.reel-caret { animation: reel-caret 0.8s step-end infinite; }
+.reel-press { animation: reel-press 3s var(--reel-ease) both; }
+.reel-tile { animation: reel-tile 0.9s var(--reel-ease) both; }
+.reel-dot { background: var(--c); box-shadow: 0 0 8px var(--c); animation: reel-rise 0.4s ease-out both; }
+.reel-scan { top: 0; animation: reel-scan 1.6s ease-in-out 0.1s 2 both; }
+.reel-ring {
+  stroke-dashoffset: var(--from);
+  animation: reel-ring 1.8s var(--reel-ease) 0.4s forwards;
+  filter: drop-shadow(0 0 6px rgb(244 114 182 / 0.6));
+}
+.reel-count {
+  counter-reset: reel var(--reel-n);
+  animation: reel-count var(--dur, 1.6s) var(--reel-ease) var(--delay, 0.2s) forwards;
+}
+.reel-count::after { content: counter(reel); }
+.reel-outline { animation: reel-outline 1.4s ease-in-out 0.6s infinite; }
+.reel-sheet { animation: reel-sheet 0.9s var(--reel-ease) both; }
+.reel-line { transform-origin: left; animation: reel-line 0.5s var(--reel-ease) both; }
+.reel-pop { animation: reel-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both; }
+.reel-burst { animation: reel-burst 1.2s ease-out 0.2s both; }
+.reel-confetti { opacity: 0; animation: reel-confetti 2.2s cubic-bezier(0.25, 0.6, 0.4, 1) both; }
+
+@keyframes reel-orb { to { transform: translate(40px, 24px) scale(1.15); } }
+@keyframes reel-in { from { opacity: 0; transform: translateY(12px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes reel-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes reel-slide { from { opacity: 0; transform: translateX(28px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes reel-fill { to { width: 100%; } }
+@keyframes reel-type { to { width: 17ch; } }
+@keyframes reel-caret { 50% { opacity: 0; } }
+@keyframes reel-press {
+  0%, 62% { transform: none; box-shadow: 0 0 0 0 rgb(255 255 255 / 0); }
+  70% { transform: scale(0.92); }
+  80% { transform: scale(1.04); box-shadow: 0 0 0 10px rgb(165 180 252 / 0.25); }
+  100% { transform: none; box-shadow: 0 0 0 18px rgb(165 180 252 / 0); }
+}
+@keyframes reel-tile {
+  0% { opacity: 0; transform: scale(0.8); }
+  50% { opacity: 1; background-color: rgb(129 140 248 / 0.45); }
+  100% { opacity: 1; transform: none; background-color: color-mix(in srgb, var(--c) 14%, transparent); }
+}
+@keyframes reel-scan { from { transform: translateY(-40px); opacity: 0; } 20%, 80% { opacity: 1; } to { transform: translateY(150px); opacity: 0; } }
+@keyframes reel-ring { to { stroke-dashoffset: var(--to-off); } }
+@keyframes reel-count { to { --reel-n: var(--to); } }
+@keyframes reel-outline {
+  0%, 100% { box-shadow: 0 0 0 2px #dc2626, 0 0 0 4px rgb(220 38 38 / 0.15); }
+  50% { box-shadow: 0 0 0 2px #dc2626, 0 0 0 8px rgb(220 38 38 / 0.3); }
+}
+@keyframes reel-sheet { from { opacity: 0; transform: translateY(30px) rotate(0deg) scale(0.9); } to { opacity: 1; transform: rotate(var(--r)); } }
+@keyframes reel-line { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes reel-pop { from { opacity: 0; transform: scale(0.3) rotate(-25deg); } to { opacity: 1; transform: none; } }
+@keyframes reel-burst { from { opacity: 0.9; transform: scale(0.8); } to { opacity: 0; transform: scale(2.6); } }
+@keyframes reel-confetti {
+  0% { opacity: 0; transform: translateY(-10px) rotate(0); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(240px) rotate(var(--spin)); }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

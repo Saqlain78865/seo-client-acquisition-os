@@ -1,0 +1,1051 @@
+// SEO Client Acquisition OS — data model.
+// SQLite in development; switch `provider` to "postgresql" for production (see docs/DEPLOYMENT.md).
+// Status-like columns are plain strings validated by Zod in src/lib/constants.ts so that
+// workspaces can add custom pipeline statuses without a schema migration.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ───────────────────────────── Identity & tenancy ─────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships     WorkspaceMembership[]
+  sessions        Session[]
+  ownedProspects  Prospect[]            @relation("ProspectOwner")
+  activities      ActivityLog[]
+  notifications   Notification[]
+  loginAttempts   LoginAttempt[]
+  createdVersions ProposalVersion[]
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  // SHA-256 of the random token stored in the cookie; the raw token is never persisted.
+  tokenHash   String   @unique
+  userId      String
+  workspaceId String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  userAgent   String?
+  ip          String?
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String?
+  success   Boolean
+  userId    String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  isDemo    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships      WorkspaceMembership[]
+  sessions         Session[]
+  settings         WorkspaceSettings?
+  prospects        Prospect[]
+  audits           WebsiteAudit[]
+  proposals        Proposal[]
+  templates        MessageTemplate[]
+  integrations     IntegrationConnection[]
+  followUps        FollowUp[]
+  activities       ActivityLog[]
+  deals            Deal[]
+  pricingPackages  PricingPackage[]
+  backgroundJobs   BackgroundJob[]
+  notifications    Notification[]
+  pipelineStatuses PipelineStatus[]
+  keywords         Keyword[]
+  keywordClusters  KeywordCluster[]
+  competitors      Competitor[]
+  dataImports      DataImport[]
+  performanceTests PerformanceTest[]
+  domainChecks     DomainCheck[]
+  auditBatches     AuditBatch[]
+  gbpProfiles      GbpProfile[]
+  kickoffTasks     KickoffTask[]
+  clientTasks      ClientTask[]
+}
+
+model WorkspaceMembership {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        String // OWNER | ADMIN | MEMBER
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+}
+
+model WorkspaceSettings {
+  id                  String  @id @default(cuid())
+  workspaceId         String  @unique
+  consultantName      String?
+  companyName         String?
+  companyEmail        String?
+  companyPhone        String?
+  companyWebsite      String?
+  consultantWhatsApp  String?
+  logoPath            String?
+  defaultCurrency     String  @default("USD")
+  proposalTheme       String  @default("navy")
+  // Hex colour used by the "brand" proposal theme, e.g. #e11d48.
+  brandColor          String?
+  crawlPageLimit      Int     @default(40)
+  crawlDelayMs        Int     @default(800)
+  dataRetentionDays   Int     @default(730)
+  followUpDefaultDays String  @default("3,7") // comma-separated day offsets after sending
+  // Monday summary email to the owner: opens, acceptances, follow-ups due.
+  weeklyDigest        Boolean   @default(true)
+  lastDigestAt        DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model PipelineStatus {
+  id          String  @id @default(cuid())
+  workspaceId String
+  key         String
+  label       String
+  sortOrder   Int
+  isTerminal  Boolean @default(false)
+  isSystem    Boolean @default(false)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+}
+
+// ───────────────────────────── CRM ─────────────────────────────
+
+model Prospect {
+  id                 String    @id @default(cuid())
+  workspaceId        String
+  businessName       String
+  websiteUrl         String
+  domain             String
+  industry           String?
+  country            String?
+  city               String?
+  primaryServices    String?
+  notes              String?
+  leadSource         String?
+  ownerId            String?
+  status             String    @default("NEW_PROSPECT")
+  estimatedValue     Float?
+  wonValue           Float?
+  currency           String    @default("USD")
+  lostReason         String?
+  objections         String?
+  // Opt-out: no outreach may be sent while set.
+  doNotContact       Boolean   @default(false)
+  doNotContactReason String?
+  nextFollowUpAt     DateTime?
+  lastActivityAt     DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  owner             User?              @relation("ProspectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  contacts          ProspectContact[]
+  audits            WebsiteAudit[]
+  proposals         Proposal[]
+  followUps         FollowUp[]
+  activities        ActivityLog[]
+  deals             Deal[]
+  meetingNotes      MeetingNote[]
+  keywords          Keyword[]
+  keywordClusters   KeywordCluster[]
+  competitors       Competitor[]
+  dataImports       DataImport[]
+  referringDomains  ReferringDomain[]
+  searchConsoleRows SearchConsoleRow[]
+  performanceTests  PerformanceTest[]
+  domainChecks      DomainCheck[]
+  gbpProfiles       GbpProfile[]
+  kickoffTasks      KickoffTask[]
+  clientTasks       ClientTask[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, domain])
+  @@index([workspaceId, createdAt])
+}
+
+model ProspectContact {
+  id               String    @id @default(cuid())
+  prospectId       String
+  // EMAIL | PHONE | WHATSAPP | ADDRESS | CONTACT_FORM | CONTACT_PAGE | SOCIAL | PERSON_NAME | BUSINESS_NAME
+  type             String
+  value            String
+  label            String?
+  sourceUrl        String?
+  // CRAWL | MANUAL | IMPORT
+  sourceMethod     String    @default("MANUAL")
+  extractedAt      DateTime?
+  // VALID_FORMAT | INVALID_FORMAT | UNCHECKED
+  validationStatus String    @default("UNCHECKED")
+  confidence       String    @default("MEDIUM")
+  verified         Boolean   @default(false)
+  verifiedAt       DateTime?
+  isPreferred      Boolean   @default(false)
+  hasConflict      Boolean   @default(false)
+  conflictNote     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@unique([prospectId, type, value])
+}
+
+model MeetingNote {
+  id         String    @id @default(cuid())
+  prospectId String
+  authorId   String?
+  // GENERAL | MEETING | OBJECTION
+  kind       String    @default("GENERAL")
+  body       String
+  meetingAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+}
+
+model Deal {
+  id          String    @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  proposalId  String?
+  title       String
+  // OPEN | WON | LOST
+  stage       String    @default("OPEN")
+  value       Float?
+  currency    String    @default("USD")
+  closedAt    DateTime?
+  lostReason  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  proposal  Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  kickoffTasks KickoffTask[]
+}
+
+model FollowUp {
+  id          String    @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  proposalId  String?
+  // PROPOSAL_REMINDER | CUSTOM | MEETING_REMINDER | REVIEW_UNANSWERED
+  type        String
+  dueAt       DateTime
+  note        String?
+  // PENDING | DONE | PAUSED | CANCELLED
+  status      String    @default("PENDING")
+  completedAt DateTime?
+  result      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  proposal  Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, dueAt])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  prospectId  String?
+  userId      String?
+  type        String
+  message     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([prospectId, createdAt])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String?
+  title       String
+  body        String?
+  link        String?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Audit engine ─────────────────────────────
+
+model WebsiteAudit {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  prospectId    String
+  inputUrl      String
+  normalizedUrl String
+  // Optional context supplied on the New Audit form (targetCountry, services, notes …)
+  context       Json?
+  // QUEUED | RUNNING | COMPLETED | PARTIAL | FAILED
+  status        String    @default("QUEUED")
+  // Who started it; also the author of a proposal generated automatically when it finishes.
+  requestedById String?
+  autoProposal  Boolean   @default(false)
+  batchId       String?
+  summary       String?
+  analysis      Json?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect         @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  batch     AuditBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  runs      AuditRun[]
+  crawlJob  CrawlJob?
+  pages     CrawledPage[]
+  findings  AuditFinding[]
+  evidence  EvidenceSource[]
+  proposals Proposal[]
+  screenshots AuditScreenshot[]
+
+  @@index([workspaceId, createdAt])
+}
+
+model AuditRun {
+  id         String    @id @default(cuid())
+  auditId    String
+  stage      String
+  // PENDING | RUNNING | COMPLETED | PARTIAL | SKIPPED | FAILED
+  status     String    @default("PENDING")
+  message    String?
+  output     Json?
+  attempts   Int       @default(0)
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  audit WebsiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, stage])
+}
+
+model CrawlJob {
+  id           String    @id @default(cuid())
+  auditId      String    @unique
+  pageLimit    Int
+  delayMs      Int
+  pagesFound   Int       @default(0)
+  pagesCrawled Int       @default(0)
+  robotsTxt    String?
+  sitemapUrls  Json?
+  // robots flags, sitemap checks, http→https check, skipped URLs, homepage URL
+  meta         Json?
+  status       String    @default("PENDING")
+  error        String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  audit WebsiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+}
+
+model CrawledPage {
+  id              String   @id @default(cuid())
+  auditId         String
+  url             String
+  finalUrl        String?
+  httpStatus      Int?
+  title           String?
+  metaDescription String?
+  canonical       String?
+  h1              Json?
+  headings        Json?
+  wordCount       Int?
+  internalLinks   Json?
+  externalLinks   Json?
+  images          Json?
+  structuredData  Json?
+  robotsMeta      String?
+  xRobotsTag      String?
+  lang            String?
+  pageType        String?
+  contentHash     String?
+  textExcerpt     String?
+  rendered        Boolean  @default(false)
+  responseTimeMs  Int?
+  bytes           Int?
+  redirectChain   Json?
+  discoveredVia   String?
+  linkedFrom      String?
+  // Remaining extracted facts (forms, contact links, mixed content, viewport, shingles, text …)
+  details         Json?
+  extractionError String?
+  crawledAt       DateTime @default(now())
+
+  audit WebsiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, url])
+}
+
+model EvidenceSource {
+  id          String   @id @default(cuid())
+  auditId     String
+  findingId   String?
+  // HTML | HTTP_HEADER | ROBOTS_TXT | SITEMAP | PAGESPEED | CSV_IMPORT | SEARCH_CONSOLE | MANUAL
+  kind        String
+  url         String?
+  excerpt     String?
+  measurement Json?
+  method      String
+  collectedAt DateTime @default(now())
+
+  audit   WebsiteAudit  @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  finding AuditFinding? @relation(fields: [findingId], references: [id], onDelete: Cascade)
+}
+
+model AuditFinding {
+  id                  String   @id @default(cuid())
+  auditId             String
+  // Stable rule identifier, e.g. "tech.missing-title"; CUSTOM for user-added findings.
+  ruleId              String
+  category            String
+  title               String
+  // CRITICAL | HIGH | MEDIUM | LOW | OPPORTUNITY | NEEDS_VERIFICATION
+  severity            String
+  // CONFIRMED | POTENTIAL | HYPOTHESIS
+  evidenceStatus      String
+  affectedUrls        Json
+  observedFacts       String
+  businessImpact      String?
+  recommendation      String
+  complexity          String   @default("MEDIUM")
+  priority            Int      @default(50)
+  confidence          String   @default("HIGH")
+  verificationMethod  String?
+  requiresAccess      Boolean  @default(false)
+  requiresHumanReview Boolean  @default(false)
+  // OPEN | ACCEPTED | DISMISSED | RESOLVED
+  resolutionStatus    String   @default("OPEN")
+  includeInProposal   Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  audit    WebsiteAudit     @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  evidence EvidenceSource[]
+
+  @@index([auditId, severity])
+}
+
+// ───────────────────────────── Research ─────────────────────────────
+
+model KeywordCluster {
+  id          String   @id @default(cuid())
+  workspaceId String
+  prospectId  String?
+  name        String
+  intent      String?
+  targetUrl   String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  keywords  Keyword[]
+  prospect  Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+}
+
+model Keyword {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  prospectId          String?
+  clusterId           String?
+  keyword             String
+  country             String?
+  region              String?
+  language            String?
+  intent              String?
+  funnelStage         String?
+  searchVolume        Int?
+  // true when the volume came from a third-party estimate rather than Google measurement
+  volumeIsEstimate    Boolean   @default(true)
+  difficulty          Float?
+  cpc                 Float?
+  currentRank         Int?
+  dataSource          String
+  retrievedAt         DateTime?
+  confidence          String    @default("MEDIUM")
+  targetUrl           String?
+  recommendedPageType String?
+  priority            Int       @default(50)
+  importId            String?
+  // Generated from services × locations; has no metrics until real data is imported.
+  isSeed              Boolean   @default(false)
+  // Why the keyword was suggested (AI ideas), shown next to it.
+  note                String?
+  // Chosen on the Research tab for the proposal's keyword section.
+  inProposal          Boolean   @default(false)
+  status              String    @default("NEW")
+  createdAt           DateTime  @default(now())
+
+  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  cluster    KeywordCluster? @relation(fields: [clusterId], references: [id], onDelete: SetNull)
+  prospect   Prospect?       @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  dataImport DataImport?     @relation(fields: [importId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, prospectId])
+}
+
+model Competitor {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  prospectId   String?
+  domain       String
+  businessName String?
+  source       String   @default("MANUAL")
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  workspace    Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  observations CompetitorObservation[]
+  domainChecks DomainCheck[]
+  prospect     Prospect?               @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+}
+
+model CompetitorObservation {
+  id           String   @id @default(cuid())
+  competitorId String
+  kind         String
+  url          String?
+  data         Json?
+  isEstimate   Boolean  @default(false)
+  dataSource   String
+  observedAt   DateTime @default(now())
+
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Proposals ─────────────────────────────
+
+model PricingPackage {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  name         String
+  description  String?
+  monthlyPrice Float?
+  setupFee     Float?
+  currency     String   @default("USD")
+  deliverables Json?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Proposal {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  prospectId        String
+  auditId           String?
+  title             String
+  // DRAFT | READY | SENT | ACCEPTED | DECLINED
+  status            String    @default("DRAFT")
+  currentVersion    Int       @default(1)
+  shareToken        String?   @unique
+  shareExpiresAt    DateTime?
+  shareRevoked      Boolean   @default(false)
+  // Version the share link shows (a sent, locked version).
+  shareVersion      Int?
+  shareViews        Int       @default(0)
+  shareLastViewedAt DateTime?
+  // Set when the client accepts on the public link.
+  acceptedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect           Prospect           @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  audit              WebsiteAudit?      @relation(fields: [auditId], references: [id], onDelete: SetNull)
+  versions           ProposalVersion[]
+  emailDeliveries    EmailDelivery[]
+  whatsappDeliveries WhatsAppDelivery[]
+  followUps          FollowUp[]
+  deals              Deal[]
+  responses          ProposalResponse[]
+  readSessions       ProposalReadSession[]
+}
+
+model ProposalVersion {
+  id              String    @id @default(cuid())
+  proposalId      String
+  version         Int
+  // Once a version has been sent it is immutable; edits create a new version.
+  locked          Boolean   @default(false)
+  currency        String    @default("USD")
+  monthlyPrice    Float?
+  setupFee        Float?
+  paymentTerms    String?
+  roadmap         String    @default("90_DAY")
+  theme           String    @default("navy")
+  title           String?
+  proposalDate    DateTime  @default(now())
+  validUntil      DateTime?
+  durationMonths  Int       @default(6)
+  // Selected service keys, e.g. ["TECHNICAL","LOCAL"]
+  services        Json?
+  // [{ title, detail }] monthly deliverables
+  deliverables    Json?
+  clientNotes     String?
+  includeAppendix Boolean   @default(true)
+  // Consultant name/company/contact/logo copied at save time so a sent PDF never changes later.
+  branding        Json?
+  createdById     String?
+  changeNote      String?
+  createdAt       DateTime  @default(now())
+
+  proposal    Proposal             @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdBy   User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  sections    ProposalSection[]
+  attachments ProposalAttachment[]
+
+  @@unique([proposalId, version])
+}
+
+model ProposalSection {
+  id        String  @id @default(cuid())
+  versionId String
+  key       String
+  title     String
+  body      String
+  sortOrder Int
+  included  Boolean @default(true)
+  // Structured content for findings, roadmap and similar sections.
+  data      Json?
+
+  version ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+}
+
+model ProposalAttachment {
+  id         String   @id @default(cuid())
+  versionId  String
+  kind       String   @default("PDF")
+  storageKey String
+  fileName   String
+  bytes      Int
+  sha256     String
+  createdAt  DateTime @default(now())
+
+  version ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Messaging ─────────────────────────────
+
+model MessageTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  // EMAIL | WHATSAPP
+  channel     String
+  name        String
+  subject     String?
+  body        String
+  version     Int      @default(1)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model IntegrationConnection {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  // GMAIL_SMTP | GMAIL_OAUTH | WHATSAPP_CLOUD | GEMINI | OPENAI | PAGESPEED | SEARCH_CONSOLE | GA4 | AHREFS | SEMRUSH
+  provider        String
+  // NOT_CONFIGURED | CONNECTED | ERROR | DISCONNECTED
+  status          String    @default("NOT_CONFIGURED")
+  accountLabel    String?
+  // AES-256-GCM encrypted JSON blob of credentials. Never returned to the client.
+  encryptedSecret String?
+  config          Json?
+  lastSyncAt      DateTime?
+  lastTestedAt    DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider])
+}
+
+model EmailDelivery {
+  id                 String    @id @default(cuid())
+  proposalId         String
+  versionNumber      Int
+  templateId         String?
+  // SHA-256 of the body: proves what was sent without storing private email text.
+  bodySha256         String?
+  followUpsScheduled Int       @default(0)
+  idempotencyKey     String    @unique
+  channelMethod      String // GMAIL_SMTP | GMAIL_API | MANUAL_MAILTO
+  sender             String?
+  recipient          String
+  cc                 String?
+  bcc                String?
+  subject            String
+  // QUEUED | SENDING | ACCEPTED | FAILED | MANUAL_OPENED
+  status             String    @default("QUEUED")
+  providerMessageId  String?
+  error              String?
+  attempts           Int       @default(0)
+  createdAt          DateTime  @default(now())
+  sentAt             DateTime?
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+}
+
+model WhatsAppDelivery {
+  id                String   @id @default(cuid())
+  proposalId        String
+  versionNumber     Int
+  templateName      String?
+  idempotencyKey    String   @unique
+  channelMethod     String // CLOUD_API | CLICK_TO_CHAT
+  recipient         String
+  messagePreview    String
+  // QUEUED | SENDING | ACCEPTED | SENT | DELIVERED | READ | FAILED | MANUAL_OPENED
+  status            String   @default("QUEUED")
+  providerMessageId String?
+  error             String?
+  attempts          Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Jobs ─────────────────────────────
+
+model BackgroundJob {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  type          String
+  payload       Json
+  // QUEUED | RUNNING | COMPLETED | FAILED
+  status        String    @default("QUEUED")
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(3)
+  runAfter      DateTime  @default(now())
+  lockedAt      DateTime?
+  lastError     String?
+  correlationId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAfter])
+}
+
+// ───────────────────────────── Imported research data ─────────────────────────────
+
+/**
+ * One uploaded CSV (or manual batch). Every imported row points back to it for provenance.
+ */
+model DataImport {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  prospectId   String?
+  // KEYWORDS | BACKLINKS | GSC_QUERIES | GSC_PAGES
+  kind         String
+  // AHREFS | SEMRUSH | GOOGLE_SEARCH_CONSOLE | OTHER
+  source       String
+  fileName     String
+  rowCount     Int
+  skippedRows  Int      @default(0)
+  columnMap    Json?
+  // e.g. "Last 3 months" for Search Console exports
+  periodLabel  String?
+  // Third-party tools estimate; Search Console measures.
+  isEstimate   Boolean  @default(true)
+  importedById String?
+  createdAt    DateTime @default(now())
+
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect          Prospect?          @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  keywords          Keyword[]
+  referringDomains  ReferringDomain[]
+  searchConsoleRows SearchConsoleRow[]
+
+  @@index([workspaceId, prospectId, kind])
+}
+
+model ReferringDomain {
+  id              String    @id @default(cuid())
+  importId        String
+  prospectId      String
+  domain          String
+  // The tool's own authority metric (Ahrefs DR, Semrush Authority Score) — an estimate, labelled by name.
+  authority       Float?
+  authorityMetric String?
+  backlinks       Int?
+  dofollow        Boolean?
+  firstSeen       DateTime?
+
+  dataImport DataImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  prospect   Prospect   @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId])
+}
+
+model SearchConsoleRow {
+  id          String @id @default(cuid())
+  importId    String
+  prospectId  String
+  // QUERY | PAGE
+  dimension   String
+  value       String
+  clicks      Int
+  impressions Int
+  ctr         Float?
+  position    Float?
+
+  dataImport DataImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  prospect   Prospect   @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, dimension])
+}
+
+/**
+ * A PageSpeed Insights run. Lab data is a simulated test; field data (CrUX) is real-user data.
+ */
+model PerformanceTest {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  prospectId       String
+  auditId          String?
+  url              String
+  // MOBILE | DESKTOP
+  strategy         String
+  performanceScore Float?
+  lab              Json?
+  field            Json?
+  // URL | ORIGIN | NONE — which CrUX data Google returned
+  fieldScope       String   @default("NONE")
+  error            String?
+  testedAt         DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, testedAt])
+}
+
+/**
+ * Free domain overview (RDAP, Wayback, Tranco, SSL, DNS, tech) for a prospect or one of its competitors.
+ */
+model DomainCheck {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  prospectId   String
+  // null = the prospect's own domain
+  competitorId String?
+  domain       String
+  data         Json
+  checkedAt    DateTime @default(now())
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect   Prospect    @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  competitor Competitor? @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, checkedAt])
+}
+
+// A reply the client sent from the public proposal link.
+model ProposalResponse {
+  id         String   @id @default(cuid())
+  proposalId String
+  // ACCEPT | QUESTION
+  kind       String
+  name       String
+  contact    String?
+  message    String?
+  version    Int
+  createdAt  DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId, createdAt])
+}
+
+// Several websites audited together, ranked by opportunity score.
+model AuditBatch {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  createdById String?
+  // Sites from the pasted list that could not be queued: [{ site, reason }]
+  skipped     Json?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  audits    WebsiteAudit[]
+
+  @@index([workspaceId, createdAt])
+}
+
+// Screenshot taken during an audit: the homepage (desktop/mobile) or a page with a finding.
+model AuditScreenshot {
+  id         String   @id @default(cuid())
+  auditId    String
+  // HOMEPAGE_DESKTOP | HOMEPAGE_MOBILE | FINDING
+  kind       String
+  ruleId     String?
+  url        String
+  storageKey String
+  caption    String?
+  createdAt  DateTime @default(now())
+
+  audit WebsiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId])
+}
+
+// Google Business Profile snapshot: fetched with the Places API or entered by hand from the profile.
+model GbpProfile {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  prospectId     String
+  // PLACES_API | MANUAL
+  source         String
+  placeId        String?
+  name           String
+  address        String?
+  phone          String?
+  website        String?
+  mapsUrl        String?
+  category       String?
+  rating         Float?
+  reviewCount    Int?
+  photoCount     Int?
+  hasHours       Boolean?
+  hasDescription Boolean?
+  businessStatus String?
+  // [{ rating, text, author, when }]
+  reviews        Json
+  // [{ query, position, total, checkedAt }] — position in Google Maps results, null when not in the results
+  rankings       Json
+  fetchedAt      DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, fetchedAt])
+}
+
+// Onboarding checklist created when a client accepts (or the deal is won).
+model KickoffTask {
+  id          String    @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  dealId      String?
+  title       String
+  detail      String?
+  done        Boolean   @default(false)
+  doneAt      DateTime?
+  sortOrder   Int
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  deal      Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+
+  @@index([prospectId, sortOrder])
+}
+
+/// How long the client spent on each part of a shared proposal: one row per visit (browser tab).
+/// Holds no personal data — the visitor key is random and only links the beats of one visit.
+model ProposalReadSession {
+  id         String   @id @default(cuid())
+  proposalId String
+  version    Int
+  visitorKey String
+  // DESKTOP | MOBILE
+  device     String
+  totalMs    Int      @default(0)
+  // { sectionKey: milliseconds }
+  sections   Json
+  startedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, visitorKey])
+  @@index([proposalId, lastSeenAt])
+}
+
+/// Monthly work for a won client, shown on the Client Work board.
+model ClientTask {
+  id          String    @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  title       String
+  detail      String?
+  // TODO | DOING | DONE
+  status      String    @default("TODO")
+  // Month the work belongs to, "YYYY-MM"
+  month       String
+  // MANUAL | DELIVERABLE (copied from the proposal's monthly deliverables)
+  source      String    @default("MANUAL")
+  sortOrder   Int       @default(0)
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, month])
+  @@index([prospectId, month])
+}

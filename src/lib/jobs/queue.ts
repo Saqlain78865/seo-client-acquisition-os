@@ -1,0 +1,106 @@
+import "server-only";
+import { randomUUID } from "node:crypto";
+import { db } from "../db";
+import { logger } from "../log";
+
+const log = logger("jobs");
+
+/**
+ * Small database-backed job queue (no Redis needed). Jobs survive restarts; a worker claims one
+ * job at a time with a conditional update, so two workers never run the same job.
+ */
+
+export type JobHandler = (payload: Record<string, unknown>, job: { id: string; attempts: number; correlationId: string | null }) => Promise<void>;
+
+const handlers = new Map<string, JobHandler>();
+export function registerJobHandler(type: string, handler: JobHandler) {
+  handlers.set(type, handler);
+}
+
+export async function enqueueJob(workspaceId: string, type: string, payload: Record<string, unknown>, opts: { maxAttempts?: number; correlationId?: string } = {}) {
+  const job = await db.backgroundJob.create({
+    data: { workspaceId, type, payload: payload as object, maxAttempts: opts.maxAttempts ?? 1, correlationId: opts.correlationId ?? randomUUID() },
+  });
+  void kickWorker();
+  return job;
+}
+
+const STALE_LOCK_MS = 30 * 60 * 1000;
+
+async function claimNext() {
+  // Jobs locked by a crashed process are released after STALE_LOCK_MS.
+  await db.backgroundJob.updateMany({
+    where: { status: "RUNNING", lockedAt: { lt: new Date(Date.now() - STALE_LOCK_MS) } },
+    data: { status: "QUEUED", lockedAt: null, lastError: "Worker stopped unexpectedly; job re-queued" },
+  });
+  const candidate = await db.backgroundJob.findFirst({ where: { status: "QUEUED", runAfter: { lte: new Date() } }, orderBy: { createdAt: "asc" } });
+  if (!candidate) return null;
+  const { count } = await db.backgroundJob.updateMany({
+    where: { id: candidate.id, status: "QUEUED" },
+    data: { status: "RUNNING", lockedAt: new Date(), attempts: { increment: 1 } },
+  });
+  return count === 1 ? { ...candidate, attempts: candidate.attempts + 1 } : null;
+}
+
+async function runOne(): Promise<boolean> {
+  const job = await claimNext();
+  if (!job) return false;
+  const handler = handlers.get(job.type);
+  if (!handler) {
+    await db.backgroundJob.update({ where: { id: job.id }, data: { status: "FAILED", lastError: `No handler for job type ${job.type}` } });
+    return true;
+  }
+  const ctx = { jobId: job.id, type: job.type, correlationId: job.correlationId, attempt: job.attempts };
+  log.info("job started", ctx);
+  try {
+    await handler(job.payload as Record<string, unknown>, { id: job.id, attempts: job.attempts, correlationId: job.correlationId });
+    await db.backgroundJob.update({ where: { id: job.id }, data: { status: "COMPLETED", lockedAt: null, lastError: null } });
+    log.info("job completed", ctx);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const retry = job.attempts < job.maxAttempts;
+    await db.backgroundJob.update({
+      where: { id: job.id },
+      data: {
+        status: retry ? "QUEUED" : "FAILED",
+        lockedAt: null,
+        lastError: message.slice(0, 1000),
+        runAfter: retry ? new Date(Date.now() + 30_000 * job.attempts) : undefined,
+      },
+    });
+    log[retry ? "warn" : "error"](retry ? "job failed, will retry" : "job failed", { ...ctx, err: e });
+  }
+  return true;
+}
+
+const state = globalThis as unknown as { __jobWorker?: { running: boolean; timer?: NodeJS.Timeout } };
+
+/** Processes queued jobs one after another until the queue is empty. Safe to call repeatedly. */
+export async function kickWorker() {
+  state.__jobWorker ??= { running: false };
+  if (state.__jobWorker.running) return;
+  state.__jobWorker.running = true;
+  try {
+    while (await runOne()) {
+      // keep draining
+    }
+  } catch (e) {
+    log.error("worker error", { err: e });
+  } finally {
+    state.__jobWorker.running = false;
+  }
+}
+
+/** Polls for jobs (delayed retries, jobs queued by other processes). Started once per server process. */
+export function startWorker(intervalMs = 5000) {
+  state.__jobWorker ??= { running: false };
+  if (state.__jobWorker.timer) return;
+  state.__jobWorker.timer = setInterval(() => void kickWorker(), intervalMs);
+  state.__jobWorker.timer.unref?.();
+  void kickWorker();
+}
+
+/** For the System page: whether this server process has started its worker loop. */
+export function workerStatus() {
+  return { started: !!state.__jobWorker?.timer, busy: !!state.__jobWorker?.running };
+}
