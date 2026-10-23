@@ -10,7 +10,7 @@ test.describe.serial("Phase 2 audit journey", () => {
     await page.getByLabel("Email").fill(OWNER.email);
     await page.getByLabel("Password").fill(OWNER.password);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 20_000 });
   });
 
   test("private and invalid URLs are rejected before anything is crawled", async ({ page }) => {

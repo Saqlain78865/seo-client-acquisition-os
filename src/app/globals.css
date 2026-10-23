@@ -90,7 +90,8 @@
   --color-ring: var(--ring);
   --shadow-card: var(--shadow-card-v);
   --shadow-lift: var(--shadow-lift-v);
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 @theme {
@@ -213,6 +214,17 @@ thead th {
     animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
   }
+  /* Endless loops would flicker at that speed: stop them instead. */
+  .marquee-track,
+  .orbit-ring,
+  .orbit-spin,
+  .orbit-float,
+  .orbit-pulse,
+  .orbit-dot,
+  .ticker-dot,
+  .type-caret {
+    animation: none !important;
+  }
 }
 
 /* ───────────── Dashboard reel (hero-reel.tsx) ───────────── */
@@ -300,6 +312,66 @@ thead th {
   0% { opacity: 0; transform: translateY(-10px) rotate(0); }
   10% { opacity: 1; }
   100% { opacity: 0; transform: translateY(240px) rotate(var(--spin)); }
+}
+
+/* ───────────── Motion components (src/components/motion) ───────────── */
+@keyframes orbit-rotate { to { transform: rotate(360deg); } }
+.orbit-ring { animation: orbit-rotate 80s linear infinite; }
+.orbit-spin { animation: orbit-rotate 9s linear infinite; }
+.orbit-pulse { animation: orbit-pulse 2.8s ease-out infinite; }
+@keyframes orbit-pulse { from { opacity: 0.9; transform: scale(1); } to { opacity: 0; transform: scale(1.45); } }
+.orbit-float { animation: orbit-float 6s ease-in-out infinite; }
+@keyframes orbit-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+.orbit-line { animation: ticker-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.orbit-dot { animation: orbit-dot 1s ease-in-out infinite; }
+@keyframes orbit-dot { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+.type-caret { animation: type-caret 0.9s step-end infinite; }
+@keyframes type-caret { 50% { opacity: 0; } }
+.marquee-track { animation: marquee 32s linear infinite; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+@keyframes marquee { to { transform: translateX(-100%); } }
+.ticker-dot { animation: ticker-dot 1.6s ease-out infinite; }
+@keyframes ticker-dot { 0% { box-shadow: 0 0 0 0 rgb(103 232 249 / 0.7); } 100% { box-shadow: 0 0 0 8px rgb(103 232 249 / 0); } }
+.ticker-in { animation: ticker-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes ticker-in { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* Two-tone headline accent, as in “Win more clients. Automatically.” */
+.text-glow {
+  background: linear-gradient(90deg, #67e8f9, #a5b4fc 55%, #c4b5fd);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 18px rgb(103 232 249 / 0.25));
+}
+
+/* A soft light that follows the cursor over cards (position set by MotionEffects). */
+.spotlight {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(240px circle at var(--mx, -999px) var(--my, -999px), color-mix(in srgb, var(--primary) 14%, transparent), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.spotlight:hover::before {
+  opacity: 1;
+}
+
+/* Blur-in when scrolled into view. Hidden only once the script runs, so nothing is lost without it. */
+.reveal {
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), filter 0.8s ease;
+}
+html.reveal-ready .reveal:not(.is-visible) {
+  opacity: 0;
+  transform: translateY(18px);
+  filter: blur(8px);
 }
 
 @keyframes shimmer {

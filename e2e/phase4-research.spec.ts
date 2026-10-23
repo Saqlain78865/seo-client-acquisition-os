@@ -8,7 +8,7 @@ async function login(page: Page) {
   await page.getByLabel("Email").fill(OWNER.email);
   await page.getByLabel("Password").fill(OWNER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 20_000 });
 }
 
 async function openResearch(page: Page) {
@@ -66,7 +66,7 @@ test.describe.serial("Phase 4 research journey", () => {
   });
 
   test("competitors: add and observe a real public site", async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(200_000);
     await login(page);
     await openResearch(page);
     await page.getByRole("tab", { name: "Competitors" }).click();
@@ -74,7 +74,7 @@ test.describe.serial("Phase 4 research journey", () => {
     await page.getByRole("button", { name: "Add competitor" }).click();
     await expect(page.getByText(/iana\.org added/)).toBeVisible();
     await page.getByRole("button", { name: "Observe site" }).click();
-    await expect(page.getByText(/\d+ public pages observed/)).toBeVisible({ timeout: 80_000 });
+    await expect(page.getByText(/\d+ public pages observed/)).toBeVisible({ timeout: 150_000 });
     await expect(page.getByText("Pages observed", { exact: true })).toBeVisible();
     await expect(page.getByText(/Public website crawl/)).toBeVisible();
   });

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { MobileNav, Sidebar } from "@/components/app-shell/sidebar";
 import { ThemeToggle } from "@/components/app-shell/theme-toggle";
 import { NotificationBell } from "@/components/app-shell/notification-bell";
+import { MotionEffects } from "@/components/motion";
 import { logout } from "../(auth)/actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -50,6 +51,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </header>
         <main className="page-enter mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">{children}</main>
+        <MotionEffects />
       </div>
     </div>
   );

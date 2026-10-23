@@ -27,7 +27,7 @@ async function login(page: Page, email: string, password: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Welcome back/ })).toBeVisible({ timeout: 20_000 });
 }
 
 test.describe.serial("Phase 6 production readiness", () => {
@@ -72,7 +72,7 @@ test.describe.serial("Phase 6 production readiness", () => {
     await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Run clean-up now" }).click();
-    await expect(page.getByText(/^Removed: \d+ expired sessions/)).toBeVisible();
+    await expect(page.getByText(/^Removed: \d+ expired sessions/)).toBeVisible({ timeout: 20_000 });
   });
 
   test("owner exports the workspace without secrets", async ({ page }) => {

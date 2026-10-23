@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { getDashboardData, type MoneyByCurrency } from "@/lib/dashboard";
 import { formatDate, formatMoney, timeAgo } from "@/lib/utils";
 import { Badge, Card, CardHeader, EmptyState, PageHeader, buttonClass } from "@/components/ui";
@@ -36,7 +37,7 @@ export const metadata: Metadata = { title: "Overview" };
 
 function Kpi({ label, value, icon: Icon, hint, href, tone = "indigo" }: { label: string; value: React.ReactNode; icon: LucideIcon; hint?: string; href?: string; tone?: keyof typeof KPI_TONES }) {
   const body = (
-    <Card interactive={!!href} className="group relative h-full overflow-hidden p-4">
+    <Card interactive={!!href} className="spotlight group relative h-full overflow-hidden p-4">
       <div className={cn("pointer-events-none absolute -top-10 -right-10 h-24 w-24 rounded-full bg-gradient-to-br opacity-[0.08] transition-opacity duration-300 group-hover:opacity-[0.16]", KPI_TONES[tone])} />
       <div className="relative flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted">{label}</p>
@@ -73,7 +74,15 @@ function Money({ values }: { values: MoneyByCurrency }) {
 
 export default async function OverviewPage() {
   const session = await requireSession();
-  const d = await getDashboardData(session.workspace.id);
+  const [d, latest] = await Promise.all([
+    getDashboardData(session.workspace.id),
+    db.activityLog.findMany({ where: { workspaceId: session.workspace.id, prospectId: { not: null } }, orderBy: { createdAt: "desc" }, take: 6, select: { message: true, createdAt: true, prospect: { select: { businessName: true } } } }),
+  ]);
+  // Real recent events for the live ticker in the hero.
+  const ticker = latest.map((a) => ({
+    at: a.createdAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+    text: `${a.prospect?.businessName ?? ""} — ${a.message}`,
+  }));
   const k = d.kpis;
 
   return (
@@ -89,7 +98,7 @@ export default async function OverviewPage() {
       />
 
       <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <QuickAudit />
+        <QuickAudit ticker={ticker} />
         <HeroReel />
       </div>
 
@@ -107,7 +116,7 @@ export default async function OverviewPage() {
       </section>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="reveal lg:col-span-2">
           <CardHeader title="Prospects created" description="Per week, last 12 weeks" />
           <div className="p-4">
             {k.totalProspects === 0 ? (
@@ -118,7 +127,7 @@ export default async function OverviewPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="reveal">
           <CardHeader title="Conversion" description="Share of prospects reaching the next stage" />
           <ul className="space-y-4 p-5">
             {d.conversions.map((c) => (
@@ -138,7 +147,7 @@ export default async function OverviewPage() {
           </ul>
         </Card>
 
-        <Card>
+        <Card className="reveal">
           <CardHeader title="Leads by source" />
           <div className="p-4">
             {d.leadSources.length === 0 ? (
@@ -149,7 +158,7 @@ export default async function OverviewPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="reveal">
           <CardHeader title="Proposal delivery by channel" description="Provider acceptance, not read receipts" />
           <div className="p-4">
             {d.deliveries.every((x) => x.accepted + x.failed + x.manual === 0) ? (
@@ -160,7 +169,7 @@ export default async function OverviewPage() {
           </div>
         </Card>
 
-        <Card className="lg:col-span-1">
+        <Card className="reveal lg:col-span-1">
           <CardHeader title="Follow-ups due this week" action={<Link href="/follow-ups" className="text-xs text-primary hover:underline">View all</Link>} />
           {d.followUpsThisWeek.length === 0 ? (
             <EmptyState icon={<BellRing className="h-5 w-5" />} title="Nothing due this week" />
@@ -180,7 +189,7 @@ export default async function OverviewPage() {
           )}
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card className="reveal lg:col-span-2">
           <CardHeader title="Recent websites" description="The last websites you audited, and where each one is now" />
           {d.recentWebsites.length === 0 ? (
             <EmptyState icon={<Activity className="h-5 w-5" />} title="Nothing yet" description="Audit a website above and it will show here." />
