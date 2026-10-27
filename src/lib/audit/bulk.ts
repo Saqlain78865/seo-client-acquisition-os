@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "../db";
 import { normalizeDomain, normalizeWebsiteUrl } from "../url";
 import { opportunityScore } from "./opportunity";
+import { toWaNumber } from "../messaging/whatsapp";
 import { AuditRequestError, startAudit } from "./service";
 import type { AuditRequest } from "../validation";
 
@@ -76,7 +77,9 @@ export async function getBatchResults(workspaceId: string, batchId: string) {
       auditId: a.id,
       status: a.status,
       prospect: a.prospect,
-      contact: contacts.find((c) => c.type === "EMAIL")?.value ?? contacts[0]?.value ?? null,
+      contact: contacts.find((c) => c.type === "EMAIL")?.value ?? null,
+      // A WhatsApp link on the site first, then any international phone number.
+      whatsapp: (contacts.find((c) => c.type === "WHATSAPP" && toWaNumber(c.value)) ?? contacts.find((c) => c.type === "PHONE" && toWaNumber(c.value)))?.value ?? null,
       pages: a.crawlJob?.pagesCrawled ?? 0,
       proposalId: a.proposals[0]?.id ?? null,
       opportunity: done ? opportunityScore(a.findings, contacts.length > 0) : null,

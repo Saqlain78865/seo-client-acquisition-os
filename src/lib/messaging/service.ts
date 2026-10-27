@@ -208,6 +208,32 @@ async function prepareWhatsApp(workspaceId: string, input: WhatsAppInput) {
   return { ctx, number };
 }
 
+/**
+ * Click-to-chat for a proposal, the same wa.me link websites use for their WhatsApp button: the best
+ * number found for the client (a WhatsApp link on their site first, then an international phone
+ * number) and a ready message. WhatsApp links cannot carry files, so the PDF is attached by hand.
+ */
+export async function whatsAppDraft(workspaceId: string, proposalId: string) {
+  const ctx = await loadComposeContext(workspaceId, proposalId);
+  if (!ctx) return null;
+  const numbers = ctx.contacts
+    .filter((c) => (c.type === "WHATSAPP" || c.type === "PHONE") && toWaNumber(c.value))
+    .sort((a, b) => (a.type === b.type ? 0 : a.type === "WHATSAPP" ? -1 : 1))
+    // The same number often appears as a WhatsApp link and as a phone number: list it once.
+    .filter((c, i, all) => all.findIndex((x) => toWaNumber(x.value) === toWaNumber(c.value)) === i)
+    .map((c) => ({ value: c.value, onWhatsApp: c.type === "WHATSAPP" }));
+  const v = ctx.vars;
+  const intro = v.consultantName ? `This is ${v.consultantName}${v.companyName ? ` from ${v.companyName}` : ""}. ` : "";
+  const message = [
+    `Hi ${v.clientName ?? "there"},`,
+    "",
+    `${intro}I reviewed ${v.websiteUrl} and prepared an SEO proposal for ${v.businessName}.${v.auditSummary ? ` ${v.auditSummary}` : ""}`,
+    "",
+    "I'm sending you the full proposal as a PDF here. Happy to answer any questions.",
+  ].join("\n");
+  return { numbers, message, version: ctx.version.version, blocked: ctx.prospect.doNotContact, pdfUrl: `/api/proposals/${proposalId}/pdf?v=${ctx.version.version}&download=1` };
+}
+
 /** Records that a click-to-chat link was opened. Nothing is "sent" until the user confirms it. */
 export async function openClickToChat(workspaceId: string, userId: string, input: WhatsAppInput) {
   const { ctx, number } = await prepareWhatsApp(workspaceId, input);

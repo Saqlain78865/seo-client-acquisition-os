@@ -1,5 +1,5 @@
 // Desktop shell for SEO Client Acquisition OS: starts the bundled server on this PC and shows it in a window.
-const { app, BrowserWindow, Menu, dialog, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, session, shell } = require("electron");
 const { spawn, spawnSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -184,6 +184,21 @@ function buildMenu() {
   );
 }
 
+/** Downloads (proposal PDFs) go straight to the Downloads folder, which then opens with the file selected —
+ * ready to drag into a WhatsApp chat or an email. */
+function saveDownloads() {
+  session.defaultSession.on("will-download", (_e, item) => {
+    const dir = app.getPath("downloads");
+    const parsed = path.parse(item.getFilename());
+    let target = path.join(dir, parsed.base);
+    for (let i = 1; fs.existsSync(target); i++) target = path.join(dir, `${parsed.name} (${i})${parsed.ext}`);
+    item.setSavePath(target);
+    item.once("done", (_ev, state) => {
+      if (state === "completed") shell.showItemInFolder(target);
+    });
+  });
+}
+
 function createWindow(url) {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -237,6 +252,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     buildMenu();
+    saveDownloads();
     showSplash();
     try {
       createWindow(await startServer());

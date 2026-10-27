@@ -4,6 +4,7 @@ import { createProposal } from "../proposals/service";
 import { resolveSender } from "./email";
 import { SendError, loadComposeContext, sendProposalEmail } from "./service";
 import { renderTemplate } from "./templates";
+import { toWaNumber } from "./whatsapp";
 import { DEFAULT_TEMPLATES } from "../workspace";
 
 export type BatchSendRow = {
@@ -14,6 +15,8 @@ export type BatchSendRow = {
   to: string | null;
   verified: boolean;
   subject: string;
+  /** Best number for WhatsApp click-to-chat (a WhatsApp link on the site first), when one was found. */
+  whatsapp: string | null;
   /** Why this proposal cannot be sent now (no email, already sent, empty placeholder…), or null when ready. */
   problem: string | null;
   sent: boolean;
@@ -28,6 +31,7 @@ async function draftFor(workspaceId: string, proposalId: string) {
   // A workspace without email templates uses the built-in first-send email.
   const template = ctx.templates.find((t) => t.channel === "EMAIL" && t.isDefault) ?? ctx.templates.find((t) => t.channel === "EMAIL") ?? { id: null, ...DEFAULT_TEMPLATES[0] };
   const contact = ctx.contacts.find((c) => c.type === "EMAIL");
+  const whatsapp = (ctx.contacts.find((c) => c.type === "WHATSAPP" && toWaNumber(c.value)) ?? ctx.contacts.find((c) => c.type === "PHONE" && toWaNumber(c.value)))?.value ?? null;
   // With no findings there is no summary sentence: drop that line rather than block the email.
   const optional = (t: string) => (ctx.vars.auditSummary ? t : t.replace(/\n?[ \t]*\{\{\s*auditSummary\s*\}\}[ \t]*\n?/g, "\n"));
   const subject = renderTemplate(optional(template.subject ?? ""), ctx.vars);
@@ -39,7 +43,7 @@ async function draftFor(workspaceId: string, proposalId: string) {
   else if (ctx.prospect.doNotContact) problem = "Opted out of contact";
   else if (!contact) problem = "No email address found on the website";
   else if (missing.length) problem = `Empty placeholder ${missing.map((m) => `{{${m}}}`).join(", ")}${missing.includes("consultantName") ? " — add your name in Settings" : ""}`;
-  return { ctx, template, contact, subject: subject.text, body: body.text, sent, problem };
+  return { ctx, template, contact, whatsapp, subject: subject.text, body: body.text, sent, problem };
 }
 
 /** Every proposal of a bulk audit, with who it would go to and whether it can be sent. */
@@ -60,6 +64,7 @@ export async function batchSendPreview(workspaceId: string, batchId: string): Pr
       domain: p.prospect.domain,
       to: d.contact?.value ?? null,
       verified: !!d.contact?.verified,
+      whatsapp: d.whatsapp,
       subject: d.subject,
       problem: d.problem,
       sent: d.sent,

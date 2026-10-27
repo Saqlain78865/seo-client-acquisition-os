@@ -14,6 +14,7 @@ import { createProposalAction } from "../../../proposals/actions";
 import { batchSendPreview } from "@/lib/messaging/bulk-send";
 import { resolveSender } from "@/lib/messaging/email";
 import { CreateAllProposals, SendAll } from "./send-all";
+import { WhatsAppButton, WhatsAppIcon } from "@/components/whatsapp-button";
 
 export const metadata: Metadata = { title: "Bulk audit results" };
 
@@ -129,6 +130,11 @@ export default async function BulkResultsPage({ params }: { params: Promise<{ id
                         <Mail className="h-3 w-3" /> {r.contact}
                       </p>
                     )}
+                    {r.whatsapp && (
+                      <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-[#128C7E]">
+                        <WhatsAppIcon className="h-3.5 w-3.5 text-[#25D366]" /> {r.whatsapp}
+                      </p>
+                    )}
                     </div>
                     </div>
                   </td>
@@ -148,9 +154,12 @@ export default async function BulkResultsPage({ params }: { params: Promise<{ id
                   </td>
                   <td className="px-4 py-3 text-right">
                     {r.proposalId ? (
-                      <Link href={`/proposals/${r.proposalId}`} className={buttonClass("secondary", "sm")}>
-                        <FileText className="h-3.5 w-3.5" /> Open proposal
-                      </Link>
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        {r.whatsapp && <WhatsAppButton proposalId={r.proposalId} number={r.whatsapp} size="sm" />}
+                        <Link href={`/proposals/${r.proposalId}`} className={buttonClass("secondary", "sm")}>
+                          <FileText className="h-3.5 w-3.5" /> Open proposal
+                        </Link>
+                      </span>
                     ) : r.opportunity ? (
                       <form action={createProposalAction} className="inline">
                         <input type="hidden" name="prospectId" value={r.prospect.id} />

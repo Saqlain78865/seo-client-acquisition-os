@@ -12,7 +12,7 @@ import { clickToChatUrl, mapGraphError, parseStatusWebhook, toWaNumber, verifyWe
 import { createShareLink, recordShareView, resolveShareToken, respondToProposal, revokeShareLink } from "@/lib/messaging/share";
 import { listNotifications, markNotificationsRead } from "@/lib/notifications";
 import { batchSendPreview, sendBatchProposals } from "@/lib/messaging/bulk-send";
-import { applyWhatsAppStatuses, confirmClickToChatSent, loadComposeContext, openClickToChat, sendProposalEmail, sendWhatsAppCloud, SendError, type EmailSendInput } from "@/lib/messaging/service";
+import { applyWhatsAppStatuses, confirmClickToChatSent, loadComposeContext, openClickToChat, sendProposalEmail, sendWhatsAppCloud, SendError, whatsAppDraft, type EmailSendInput } from "@/lib/messaging/service";
 
 describe("templates", () => {
   it("fills placeholders and reports missing or unknown ones", () => {
@@ -195,6 +195,20 @@ describe("sending (database + local SMTP server)", () => {
     const other = await newProposal("other@client.example");
     expect(await sendBatchProposals(workspaceId, userId, batch.id, [other.proposal.id])).toEqual([]);
   }, 120_000);
+
+  it("WhatsApp click-to-chat draft: prefers the site's WhatsApp link, needs a country code, links the PDF", async () => {
+    const { prospect, proposal } = await newProposal("wa@client.example");
+    await addContact(prospect.id, { type: "PHONE", value: "+971 4 123 4567" });
+    await addContact(prospect.id, { type: "PHONE", value: "04 123 9999" });
+    let d = (await whatsAppDraft(workspaceId, proposal.id))!;
+    expect(d.numbers).toEqual([{ value: "+97141234567", onWhatsApp: false }]);
+    await addContact(prospect.id, { type: "WHATSAPP", value: "+971 50 111 2222" });
+    d = (await whatsAppDraft(workspaceId, proposal.id))!;
+    expect(d.numbers[0]).toEqual({ value: "+971501112222", onWhatsApp: true });
+    expect(d.message).toMatch(/^Hi Sara,/);
+    expect(d.message).toMatch(/PDF here/);
+    expect(d.pdfUrl).toBe(`/api/proposals/${proposal.id}/pdf?v=1&download=1`);
+  });
 
   it("share links lock the version, expire and can be revoked", async () => {
     const { proposal } = await newProposal("share@client.example");

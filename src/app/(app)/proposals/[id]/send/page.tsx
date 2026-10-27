@@ -5,8 +5,9 @@ import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth";
 import { randomToken } from "@/lib/crypto";
 import { resolveSender } from "@/lib/messaging/email";
-import { loadComposeContext } from "@/lib/messaging/service";
-import { Alert, PageHeader } from "@/components/ui";
+import { loadComposeContext, whatsAppDraft } from "@/lib/messaging/service";
+import { Alert, Card, CardHeader, PageHeader } from "@/components/ui";
+import { WhatsAppButton, WhatsAppIcon } from "@/components/whatsapp-button";
 import { Composer } from "./composer";
 
 export const metadata: Metadata = { title: "Send proposal" };
@@ -16,7 +17,7 @@ export default async function SendPage({ params, searchParams }: { params: Promi
   const session = await requireSession();
   const ctx = await loadComposeContext(session.workspace.id, id);
   if (!ctx) notFound();
-  const sender = await resolveSender(session.workspace.id);
+  const [sender, wa] = await Promise.all([resolveSender(session.workspace.id), whatsAppDraft(session.workspace.id, id)]);
   const pdfName = `SEO-Proposal-…-v${ctx.version.version}.pdf`;
 
   return (
@@ -47,6 +48,31 @@ export default async function SendPage({ params, searchParams }: { params: Promi
         blocked={ctx.prospect.doNotContact}
         followUp={sp.followup ? ctx.followUp : null}
       />
+      <Card className="mt-6">
+        <CardHeader
+          title={
+            <span className="inline-flex items-center gap-2">
+              <WhatsAppIcon className="text-[#25D366]" /> Or send on WhatsApp
+            </span>
+          }
+          description="Opens the client's chat with a ready message and downloads the PDF — drop the PDF into the chat and press Send. Free click-to-chat, no WhatsApp API."
+        />
+        {wa && wa.numbers.length > 0 ? (
+          <ul className="divide-y divide-border">
+            {wa.numbers.map((n) => (
+              <li key={n.value} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                <span className="font-medium tabular-nums">{n.value}</span>
+                <span className="text-xs text-muted">{n.onWhatsApp ? "WhatsApp link on their website" : "Phone number — may not be on WhatsApp"}</span>
+                <span className="ml-auto">
+                  <WhatsAppButton proposalId={id} number={n.value} label="Send on WhatsApp" disabled={wa.blocked} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="p-5 text-sm text-muted">No WhatsApp or international phone number was found on this website. Add one (with the country code, e.g. +971…) on the prospect page.</p>
+        )}
+      </Card>
     </div>
   );
 }

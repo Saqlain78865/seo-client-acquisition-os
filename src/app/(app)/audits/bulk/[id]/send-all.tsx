@@ -9,6 +9,7 @@ import { Badge, Button, Card, CardHeader } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { BatchSendRow } from "@/lib/messaging/bulk-send";
 import { createBatchProposalsAction, sendBatchAction } from "./actions";
+import { WhatsAppButton } from "@/components/whatsapp-button";
 
 /** "Create proposals for all" for batches that were run without automatic proposals. */
 export function CreateAllProposals({ batchId, count }: { batchId: string; count: number }) {
@@ -77,21 +78,21 @@ export function SendAll({ batchId, rows, senderReady }: { batchId: string; rows:
           </Link>
         }
       />
-      {!senderReady ? (
-        <p className="p-5 text-sm text-muted">
+      {!senderReady && (
+        <p className="border-b border-border px-5 py-3 text-sm text-muted">
           <Link href="/integrations" className="font-medium text-primary hover:underline">
             Connect Gmail
           </Link>{" "}
-          to send all proposals from here.
+          to email all proposals in one go. WhatsApp works without it.
         </p>
-      ) : (
-        <>
+      )}
+      <>
           <ul className="divide-y divide-border text-sm">
             {rows.map((r) => {
               const res = results[r.proposalId];
               return (
                 <li key={r.proposalId} className={cn("flex items-center gap-3 px-5 py-2.5", r.problem && !res && "opacity-70")}>
-                  <input type="checkbox" aria-label={`Send to ${r.businessName}`} disabled={!!r.problem || pending} checked={chosen.has(r.proposalId)} onChange={() => toggle(r.proposalId)} className="h-4 w-4" />
+                  <input type="checkbox" aria-label={`Send to ${r.businessName}`} disabled={!senderReady || !!r.problem || pending} checked={chosen.has(r.proposalId)} onChange={() => toggle(r.proposalId)} className="h-4 w-4" />
                   <div className="min-w-0 flex-1">
                     <Link href={`/proposals/${r.proposalId}`} className="font-medium hover:text-primary">
                       {r.businessName}
@@ -100,6 +101,7 @@ export function SendAll({ batchId, rows, senderReady }: { batchId: string; rows:
                       <Mail className="h-3 w-3" /> {r.to ?? "no email"} {r.to && !r.verified && <span className="text-warning">· found on the website, not verified</span>}
                     </p>
                   </div>
+                  {r.whatsapp && !r.problem?.startsWith("Opted out") && <WhatsAppButton proposalId={r.proposalId} number={r.whatsapp} size="sm" />}
                   {res ? (
                     <Badge tone={res.ok ? "success" : "danger"}>
                       {res.ok ? <CheckCircle2 className="h-3 w-3" /> : <CircleAlert className="h-3 w-3" />} {res.message}
@@ -115,7 +117,7 @@ export function SendAll({ batchId, rows, senderReady }: { batchId: string; rows:
               );
             })}
           </ul>
-          {ready.length > 0 && (
+          {senderReady && ready.length > 0 && (
             <div className="flex flex-wrap items-center gap-3 border-t border-border p-5">
               <label className="flex items-start gap-2 text-sm">
                 <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 h-4 w-4" />
@@ -126,8 +128,7 @@ export function SendAll({ batchId, rows, senderReady }: { batchId: string; rows:
               </Button>
             </div>
           )}
-        </>
-      )}
+      </>
     </Card>
   );
 }

@@ -154,6 +154,8 @@ test.describe.serial("Phase 5 messaging journey", () => {
     // WhatsApp sending was removed: no channel tabs, only the email form.
     await expect(page.getByRole("tab", { name: "WhatsApp" })).toHaveCount(0);
     await expect(page.getByText("Option 1 — Open in WhatsApp")).toHaveCount(0);
+    // WhatsApp is free click-to-chat only (no API): a card under the email form.
+    await expect(page.getByText("Or send on WhatsApp")).toBeVisible();
     await expect(page.getByLabel("CC", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: /CC \/ BCC/ }).click();
     await expect(page.getByLabel("CC", { exact: true })).toBeVisible();
