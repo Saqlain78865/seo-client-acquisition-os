@@ -62,7 +62,7 @@ export default async function SendPage({ params, searchParams }: { params: Promi
             {wa.numbers.map((n) => (
               <li key={n.value} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
                 <span className="font-medium tabular-nums">{n.value}</span>
-                <span className="text-xs text-muted">{n.onWhatsApp ? "WhatsApp link on their website" : "Phone number — may not be on WhatsApp"}</span>
+                <span className={n.whatsapp === "CONFIRMED" ? "text-xs font-medium text-[#128C7E]" : n.whatsapp === "LIKELY" ? "text-xs text-text" : "text-xs text-warning"}>{n.label}</span>
                 <span className="ml-auto">
                   <WhatsAppButton proposalId={id} number={n.value} label="Send on WhatsApp" disabled={wa.blocked} />
                 </span>
@@ -70,7 +70,7 @@ export default async function SendPage({ params, searchParams }: { params: Promi
             ))}
           </ul>
         ) : (
-          <p className="p-5 text-sm text-muted">No WhatsApp or international phone number was found on this website. Add one (with the country code, e.g. +971…) on the prospect page.</p>
+          <p className="p-5 text-sm text-muted">No number that could be on WhatsApp was found on this website (landlines and invalid numbers are left out). Add one with the country code, e.g. +971…, on the prospect page.</p>
         )}
       </Card>
     </div>

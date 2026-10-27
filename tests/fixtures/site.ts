@@ -54,7 +54,7 @@ export function fixtureRoutes(base: string): Record<string, { status?: number; h
         title: "Contact us - Bright Smile Dental",
         desc: "Contact Bright Smile Dental.",
         body: `<h1>Contact us</h1><p>Email <a href="mailto:hello@brightsmile.example">hello@brightsmile.example</a> or call <a href="tel:+441134960000">0113 496 0000</a>.
-          WhatsApp us: <a href="https://wa.me/447700900123">chat</a>.</p>
+          WhatsApp us: <a href="https://wa.me/447911123456">chat</a>.</p>
           <form action="/send" method="post"><input type="text" name="name"><input type="email" name="email"><textarea name="message"></textarea><button>Send</button></form>`,
       }),
     },

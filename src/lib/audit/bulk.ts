@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "../db";
 import { normalizeDomain, normalizeWebsiteUrl } from "../url";
 import { opportunityScore } from "./opportunity";
-import { toWaNumber } from "../messaging/whatsapp";
+import { countryCode, countryFromDomain, whatsAppNumbers } from "../phone";
 import { AuditRequestError, startAudit } from "./service";
 import type { AuditRequest } from "../validation";
 
@@ -61,7 +61,7 @@ export async function getBatchResults(workspaceId: string, batchId: string) {
     include: {
       audits: {
         include: {
-          prospect: { select: { id: true, businessName: true, domain: true, contacts: { where: { type: { in: ["EMAIL", "PHONE", "WHATSAPP"] } }, select: { type: true, value: true } } } },
+          prospect: { select: { id: true, businessName: true, domain: true, country: true, contacts: { where: { type: { in: ["EMAIL", "PHONE", "WHATSAPP"] } }, select: { type: true, value: true, sourceMethod: true } } } },
           findings: { select: { severity: true, evidenceStatus: true, title: true, priority: true, ruleId: true } },
           proposals: { select: { id: true }, take: 1, orderBy: { createdAt: "desc" } },
           crawlJob: { select: { pagesCrawled: true } },
@@ -78,8 +78,8 @@ export async function getBatchResults(workspaceId: string, batchId: string) {
       status: a.status,
       prospect: a.prospect,
       contact: contacts.find((c) => c.type === "EMAIL")?.value ?? null,
-      // A WhatsApp link on the site first, then any international phone number.
-      whatsapp: (contacts.find((c) => c.type === "WHATSAPP" && toWaNumber(c.value)) ?? contacts.find((c) => c.type === "PHONE" && toWaNumber(c.value)))?.value ?? null,
+      // A WhatsApp link on the site first, then mobiles; landlines and invalid numbers are left out.
+      whatsapp: whatsAppNumbers(contacts, countryCode(a.prospect.country) ?? countryFromDomain(a.prospect.domain))[0] ?? null,
       pages: a.crawlJob?.pagesCrawled ?? 0,
       proposalId: a.proposals[0]?.id ?? null,
       opportunity: done ? opportunityScore(a.findings, contacts.length > 0) : null,

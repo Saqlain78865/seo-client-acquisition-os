@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "../db";
 import { logActivity, ACTIVITY_TYPES } from "../activity";
 import { crawlSite, type CrawledRecord, type CrawlResult } from "../crawler/crawl";
+import { countryCode, countryFromDomain } from "../phone";
 import { extractContacts, type ContactCandidate } from "../crawler/contacts-extract";
 import { assertPublicHost, assertUrlShape, BlockedUrlError } from "../crawler/network-guard";
 import type { ExtractedPage } from "../crawler/extract";
@@ -384,6 +385,7 @@ export async function runAudit(auditId: string) {
 
     const contacts = extractContacts(
       input.pages.filter((p) => p.page && p.finalUrl).map((p) => ({ url: p.finalUrl!, pageType: p.pageType ?? "OTHER", page: p.page! })),
+      { defaultCountry: countryCode(context.targetCountry) ?? countryCode(audit.prospect.country) ?? countryFromDomain(audit.prospect.domain) },
     );
 
     const business = await stage(

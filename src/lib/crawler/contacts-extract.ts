@@ -1,5 +1,7 @@
 import { isValidEmailFormat, isValidPhoneFormat, normalizePhone } from "../contacts";
 import type { ExtractedPage } from "./extract";
+import { checkPhone } from "../phone";
+import type { CountryCode } from "libphonenumber-js/max";
 
 /**
  * Finds publicly displayed business contact details. Rules:
@@ -57,13 +59,24 @@ function addressFromSchema(a: unknown): string | null {
 
 const BUSINESS_SCHEMA = /^(organization|localbusiness|corporation|.*business|.*store|.*clinic|dentist|physician|restaurant|hotel|travelagency|attorney|legalservice|plumber|electrician|roofingcontractor|hvacbusiness|realestateagent|autorepair|beautysalon|medicalbusiness|professionalservice|homeandconstructionbusiness)$/i;
 
-export function extractContacts(pages: PageForContacts[]): ContactCandidate[] {
+/**
+ * `defaultCountry` (from the audit's target country or the site's domain) lets local numbers such as
+ * "050 123 4567" on a .ae site become "+971501234567", and lets invalid numbers be dropped.
+ */
+export function extractContacts(pages: PageForContacts[], opts: { defaultCountry?: CountryCode | null } = {}): ContactCandidate[] {
   const map = new Map<string, ContactCandidate>();
   const add = (type: ContactCandidate["type"], raw: string, url: string, method: string) => {
     let value = raw.trim();
     if (!value) return;
     if (type === "EMAIL") value = value.toLowerCase();
-    if (type === "PHONE" || type === "WHATSAPP") value = normalizePhone(value);
+    if (type === "PHONE" || type === "WHATSAPP") {
+      // Checked against the country's numbering plan: text that only looks like a number (dates,
+      // sizes, IDs) is dropped, and valid numbers are stored in one international form.
+      const check = checkPhone(value, { defaultCountry: opts.defaultCountry });
+      if (check.valid) value = check.e164!;
+      else if (value.trim().startsWith("+") || value.trim().startsWith("00") || opts.defaultCountry) return;
+      else value = normalizePhone(value);
+    }
     if (type === "SOCIAL" || type === "CONTACT_PAGE" || type === "CONTACT_FORM") value = value.replace(/\/$/, "");
     const key = `${type}|${value}`;
     const existing = map.get(key);

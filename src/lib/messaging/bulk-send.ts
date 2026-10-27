@@ -4,7 +4,7 @@ import { createProposal } from "../proposals/service";
 import { resolveSender } from "./email";
 import { SendError, loadComposeContext, sendProposalEmail } from "./service";
 import { renderTemplate } from "./templates";
-import { toWaNumber } from "./whatsapp";
+import { countryCode, countryFromDomain, whatsAppNumbers } from "../phone";
 import { DEFAULT_TEMPLATES } from "../workspace";
 
 export type BatchSendRow = {
@@ -31,7 +31,7 @@ async function draftFor(workspaceId: string, proposalId: string) {
   // A workspace without email templates uses the built-in first-send email.
   const template = ctx.templates.find((t) => t.channel === "EMAIL" && t.isDefault) ?? ctx.templates.find((t) => t.channel === "EMAIL") ?? { id: null, ...DEFAULT_TEMPLATES[0] };
   const contact = ctx.contacts.find((c) => c.type === "EMAIL");
-  const whatsapp = (ctx.contacts.find((c) => c.type === "WHATSAPP" && toWaNumber(c.value)) ?? ctx.contacts.find((c) => c.type === "PHONE" && toWaNumber(c.value)))?.value ?? null;
+  const whatsapp = whatsAppNumbers(ctx.contacts, countryCode(ctx.prospect.country) ?? countryFromDomain(ctx.prospect.domain))[0]?.value ?? null;
   // With no findings there is no summary sentence: drop that line rather than block the email.
   const optional = (t: string) => (ctx.vars.auditSummary ? t : t.replace(/\n?[ \t]*\{\{\s*auditSummary\s*\}\}[ \t]*\n?/g, "\n"));
   const subject = renderTemplate(optional(template.subject ?? ""), ctx.vars);

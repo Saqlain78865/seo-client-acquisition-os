@@ -120,7 +120,7 @@ describe("contact extraction", () => {
     const get = (type: string) => contacts.filter((c) => c.type === type).map((c) => c.value);
     expect(get("EMAIL")).toEqual(["hello@brightsmile.example"]);
     expect(get("PHONE")).toContain("+441134960000");
-    expect(get("WHATSAPP")).toEqual(["+447700900123"]);
+    expect(get("WHATSAPP")).toEqual(["+447911123456"]);
     expect(get("BUSINESS_NAME")).toContain("Bright Smile Dental");
     expect(get("ADDRESS")[0]).toContain("Leeds");
     expect(get("CONTACT_PAGE")).toEqual([`${site.base}/contact`]);

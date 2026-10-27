@@ -196,15 +196,19 @@ describe("sending (database + local SMTP server)", () => {
     expect(await sendBatchProposals(workspaceId, userId, batch.id, [other.proposal.id])).toEqual([]);
   }, 120_000);
 
-  it("WhatsApp click-to-chat draft: prefers the site's WhatsApp link, needs a country code, links the PDF", async () => {
+  it("WhatsApp click-to-chat draft: WhatsApp numbers first, mobiles next, no landlines, links the PDF", async () => {
     const { prospect, proposal } = await newProposal("wa@client.example");
-    await addContact(prospect.id, { type: "PHONE", value: "+971 4 123 4567" });
+    // A landline and a number without a country (no country known for this prospect) are left out.
+    await addContact(prospect.id, { type: "PHONE", value: "+44 20 7946 0958" });
     await addContact(prospect.id, { type: "PHONE", value: "04 123 9999" });
     let d = (await whatsAppDraft(workspaceId, proposal.id))!;
-    expect(d.numbers).toEqual([{ value: "+97141234567", onWhatsApp: false }]);
+    expect(d.numbers).toEqual([]);
+    await addContact(prospect.id, { type: "PHONE", value: "+971 55 123 4567" });
+    d = (await whatsAppDraft(workspaceId, proposal.id))!;
+    expect(d.numbers).toEqual([{ value: "+971551234567", whatsapp: "LIKELY", label: "Mobile number — usually on WhatsApp" }]);
     await addContact(prospect.id, { type: "WHATSAPP", value: "+971 50 111 2222" });
     d = (await whatsAppDraft(workspaceId, proposal.id))!;
-    expect(d.numbers[0]).toEqual({ value: "+971501112222", onWhatsApp: true });
+    expect(d.numbers[0]).toEqual({ value: "+971501112222", whatsapp: "CONFIRMED", label: "Saved by you as a WhatsApp number" });
     expect(d.message).toMatch(/^Hi Sara,/);
     expect(d.message).toMatch(/PDF here/);
     expect(d.pdfUrl).toBe(`/api/proposals/${proposal.id}/pdf?v=1&download=1`);

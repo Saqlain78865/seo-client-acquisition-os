@@ -4,6 +4,7 @@ import { db } from "../db";
 import { ACTIVITY_TYPES, logActivity } from "../activity";
 import { getCredentials } from "../integrations";
 import { isValidEmailFormat } from "../contacts";
+import { countryCode, countryFromDomain, whatsAppNumbers } from "../phone";
 import { recomputeNextFollowUp } from "../prospects";
 import { ensurePdf } from "../proposals/service";
 import type { ProposalFinding } from "../proposals/types";
@@ -216,12 +217,8 @@ async function prepareWhatsApp(workspaceId: string, input: WhatsAppInput) {
 export async function whatsAppDraft(workspaceId: string, proposalId: string) {
   const ctx = await loadComposeContext(workspaceId, proposalId);
   if (!ctx) return null;
-  const numbers = ctx.contacts
-    .filter((c) => (c.type === "WHATSAPP" || c.type === "PHONE") && toWaNumber(c.value))
-    .sort((a, b) => (a.type === b.type ? 0 : a.type === "WHATSAPP" ? -1 : 1))
-    // The same number often appears as a WhatsApp link and as a phone number: list it once.
-    .filter((c, i, all) => all.findIndex((x) => toWaNumber(x.value) === toWaNumber(c.value)) === i)
-    .map((c) => ({ value: c.value, onWhatsApp: c.type === "WHATSAPP" }));
+  // Checked against the country's numbering plan: landlines and invalid numbers are left out.
+  const numbers = whatsAppNumbers(ctx.contacts, countryCode(ctx.prospect.country) ?? countryFromDomain(ctx.prospect.domain)).filter((n) => toWaNumber(n.value));
   const v = ctx.vars;
   const intro = v.consultantName ? `This is ${v.consultantName}${v.companyName ? ` from ${v.companyName}` : ""}. ` : "";
   const message = [

@@ -131,8 +131,9 @@ export default async function BulkResultsPage({ params }: { params: Promise<{ id
                       </p>
                     )}
                     {r.whatsapp && (
-                      <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-[#128C7E]">
-                        <WhatsAppIcon className="h-3.5 w-3.5 text-[#25D366]" /> {r.whatsapp}
+                      <p className="mt-0.5 flex items-center gap-1 text-xs font-medium text-[#128C7E]" title={r.whatsapp.label}>
+                        <WhatsAppIcon className="h-3.5 w-3.5 text-[#25D366]" /> {r.whatsapp.value}
+                        <span className="font-normal text-muted">· {r.whatsapp.whatsapp === "CONFIRMED" ? "on WhatsApp" : r.whatsapp.whatsapp === "LIKELY" ? "mobile" : "may be on WhatsApp"}</span>
                       </p>
                     )}
                     </div>
@@ -155,7 +156,7 @@ export default async function BulkResultsPage({ params }: { params: Promise<{ id
                   <td className="px-4 py-3 text-right">
                     {r.proposalId ? (
                       <span className="inline-flex flex-wrap items-center justify-end gap-2">
-                        {r.whatsapp && <WhatsAppButton proposalId={r.proposalId} number={r.whatsapp} size="sm" />}
+                        {r.whatsapp && <WhatsAppButton proposalId={r.proposalId} number={r.whatsapp.value} size="sm" />}
                         <Link href={`/proposals/${r.proposalId}`} className={buttonClass("secondary", "sm")}>
                           <FileText className="h-3.5 w-3.5" /> Open proposal
                         </Link>
