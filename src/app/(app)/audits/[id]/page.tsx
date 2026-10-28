@@ -61,6 +61,7 @@ export default async function AuditPage({ params, searchParams }: { params: Prom
   // The automatic proposal is drafted just after the audit completes: keep refreshing briefly until it appears.
   const awaitingProposal = finished && audit.autoProposal && !proposal && completedRecently(audit.completedAt);
   const runs = new Map(audit.runs.map((r) => [r.stage, r]));
+  const incomplete = audit.runs.filter((r) => r.status === "FAILED" || r.status === "PARTIAL");
   const analysis = (audit.analysis ?? {}) as Analysis;
   const explanations = new Map((analysis.ai?.findingExplanations ?? []).map((e) => [e.ruleId, e.clientExplanation]));
   const tab = sp.tab === "pages" ? "pages" : "findings";
@@ -112,6 +113,21 @@ export default async function AuditPage({ params, searchParams }: { params: Prom
           </>
         }
       />
+
+      {audit.status === "PARTIAL" && incomplete.length > 0 && (
+        <Alert tone="warning" className="mb-6" title="Why “partially completed”?">
+          <p>The audit finished and its findings are ready to use — only these parts did not complete:</p>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+            {incomplete.map((r) => (
+              <li key={r.stage}>
+                <b className="font-medium">{AUDIT_STAGES.find((s) => s.key === r.stage)?.label ?? r.stage}</b>
+                {r.message ? ` — ${r.message}` : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5">Press <b className="font-medium">Retry</b> to redo just those parts; everything else is kept.</p>
+        </Alert>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">

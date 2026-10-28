@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, PageHeader } from "@/components/ui";
 import { NewAuditForm } from "./new-audit-form";
+import { NewAuditReel } from "../../page-reels";
 
 export const metadata: Metadata = { title: "New Website Audit" };
 
@@ -20,6 +21,7 @@ export default async function NewAuditPage({ searchParams }: { searchParams: Pro
         title="New Website Audit"
         description={`Crawls up to ${settings?.crawlPageLimit ?? 40} public pages, respecting robots.txt, and reports only findings backed by collected evidence.`}
       />
+      <NewAuditReel className="mb-6" />
       <Card className="p-6">
         <NewAuditForm prospect={prospect} defaultCurrency={prospect?.currency ?? settings?.defaultCurrency ?? "USD"} />
       </Card>

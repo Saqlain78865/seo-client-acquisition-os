@@ -15,6 +15,8 @@ import { ShareCard } from "./share-card";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { whatsAppDraft } from "@/lib/messaging/service";
 import { ReadingCard } from "./reading-card";
+import { WhatsAppStatusCard } from "./whatsapp-card";
+import { whatsAppFollowUp, whatsAppState } from "@/lib/messaging/manual";
 
 export const metadata: Metadata = { title: "Proposal" };
 
@@ -28,13 +30,15 @@ export default async function ProposalPage({ params, searchParams }: { params: P
   const isLatest = version.version === proposal.currentVersion;
   const share = shareState(proposal);
   const link = share === "ACTIVE" && proposal.shareToken ? shareUrl(proposal.shareToken) : null;
-  const [emails, whatsapps, qr, responses, wa] = await Promise.all([
+  const [emails, whatsapps, qr, responses, wa, waState] = await Promise.all([
     db.emailDelivery.findMany({ where: { proposalId: proposal.id }, orderBy: { createdAt: "desc" }, take: 20 }),
     db.whatsAppDelivery.findMany({ where: { proposalId: proposal.id }, orderBy: { createdAt: "desc" }, take: 20 }),
     link ? qrDataUri(link) : null,
     db.proposalResponse.findMany({ where: { proposalId: proposal.id }, orderBy: { createdAt: "desc" }, take: 20 }),
     whatsAppDraft(session.workspace.id, proposal.id),
+    whatsAppState(proposal.id),
   ]);
+  const waFollowUp = waState.seen ? await whatsAppFollowUp(session.workspace.id, proposal.id) : null;
   const deliveries = [
     ...emails.map((d) => ({ id: d.id, at: d.sentAt ?? d.createdAt, channel: "Email", to: d.recipient, status: d.status, version: d.versionNumber, detail: d.error ?? (d.sender ? `from ${d.sender}` : null), messageId: d.providerMessageId })),
     ...whatsapps.map((d) => ({ id: d.id, at: d.updatedAt, channel: d.channelMethod === "CLOUD_API" ? "WhatsApp API" : "WhatsApp (manual)", to: d.recipient, status: d.status, version: d.versionNumber, detail: d.error, messageId: d.providerMessageId })),
@@ -106,6 +110,9 @@ export default async function ProposalPage({ params, searchParams }: { params: P
         </Card>
 
         <div className="space-y-6">
+          {isLatest && !wa?.blocked && (
+            <WhatsAppStatusCard proposalId={proposal.id} state={{ ...waState, sentAt: waState.sentAt?.toISOString() ?? null }} followUp={waFollowUp} />
+          )}
           <Card>
             <CardHeader title="PDF" />
             <div className="space-y-3 p-5 text-sm">

@@ -67,7 +67,7 @@ export async function loadComposeContext(workspaceId: string, proposalId: string
 }
 
 /** Locks the version and moves statuses forward after a confirmed send. Creates reminder follow-ups if asked. */
-async function markSent(workspaceId: string, userId: string | null, proposalId: string, version: number, channel: string, scheduleFollowUps: boolean) {
+export async function markSent(workspaceId: string, userId: string | null, proposalId: string, version: number, channel: string, scheduleFollowUps: boolean) {
   const proposal = await db.proposal.findUniqueOrThrow({ where: { id: proposalId }, include: { prospect: true } });
   await db.$transaction([
     db.proposalVersion.update({ where: { proposalId_version: { proposalId, version } }, data: { locked: true } }),

@@ -83,7 +83,8 @@ test.describe.serial("Phase 5 messaging journey", () => {
 
     await page.goto("/proposals");
     await page.locator("tbody a").first().click();
-    await page.getByRole("link", { name: "Send" }).click();
+    await page.waitForURL(/\/proposals\/[^/?]+$/);
+    await page.getByRole("link", { name: "Send", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Send proposal" })).toBeVisible();
     // An address that is not a saved contact needs an explicit confirmation.
     await page.getByLabel("To", { exact: true }).fill("someone@elsewhere.example");
@@ -150,7 +151,8 @@ test.describe.serial("Phase 5 messaging journey", () => {
     await login(page);
     await page.goto("/proposals");
     await page.locator("tbody a").first().click();
-    await page.getByRole("link", { name: "Send" }).click();
+    await page.waitForURL(/\/proposals\/[^/?]+$/);
+    await page.getByRole("link", { name: "Send", exact: true }).click();
     // WhatsApp sending was removed: no channel tabs, only the email form.
     await expect(page.getByRole("tab", { name: "WhatsApp" })).toHaveCount(0);
     await expect(page.getByText("Option 1 — Open in WhatsApp")).toHaveCount(0);
@@ -168,7 +170,8 @@ test.describe.serial("Phase 5 messaging journey", () => {
     await expect(page.getByText("Do not contact")).toBeVisible();
     await page.goto("/proposals");
     await page.locator("tbody a").first().click();
-    await page.getByRole("link", { name: "Send" }).click();
+    await page.waitForURL(/\/proposals\/[^/?]+$/);
+    await page.getByRole("link", { name: "Send", exact: true }).click();
     await expect(page.getByText("This prospect has opted out")).toBeVisible();
   });
 });

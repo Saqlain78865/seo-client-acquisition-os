@@ -6,6 +6,7 @@ import { listBatches, MAX_BULK_SITES } from "@/lib/audit/bulk";
 import { formatDate } from "@/lib/utils";
 import { Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { BulkAuditForm } from "./bulk-form";
+import { BulkReel } from "../../page-reels";
 
 export const metadata: Metadata = { title: "Bulk Audit" };
 
@@ -18,6 +19,7 @@ export default async function BulkAuditPage() {
         title="Bulk Audit"
         description="Paste a list of websites. Each gets a quick audit (12 pages), and the list is ranked by opportunity score so you can contact the best leads first."
       />
+      <BulkReel className="mb-6" />
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <Card className="p-6">
           <BulkAuditForm max={MAX_BULK_SITES} />

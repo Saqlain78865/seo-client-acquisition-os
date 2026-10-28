@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth";
 import { reportError, withReference } from "@/lib/log";
 import { SendError, confirmClickToChatSent, openClickToChat, whatsAppDraft } from "@/lib/messaging/service";
 import { toWaNumber } from "@/lib/messaging/whatsapp";
+import { markSeenOnWhatsApp, markSentOnWhatsApp } from "@/lib/messaging/manual";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -37,6 +38,31 @@ export async function openWhatsAppAction(proposalId: string, number?: string, me
     });
     revalidatePath(`/proposals/${proposalId}`);
     return { ok: true, url: r.url, deliveryId: r.delivery.id, pdfUrl: draft.pdfUrl };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** "I sent it on WhatsApp" — for a proposal sent from the phone or WhatsApp directly. */
+export async function markSentOnWhatsAppAction(proposalId: string): Promise<Result<{ followUps: number; already: boolean }>> {
+  const session = await requireSession();
+  try {
+    const r = await markSentOnWhatsApp(session.workspace.id, session.user.id, proposalId);
+    revalidatePath(`/proposals/${proposalId}`);
+    revalidatePath("/proposals");
+    return { ok: true, followUps: r.followUps, already: r.already };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** "They've seen it" on WhatsApp: schedules the follow-up and returns the ready message. */
+export async function markSeenOnWhatsAppAction(proposalId: string): Promise<Result<{ message: string; url: string | null }>> {
+  const session = await requireSession();
+  try {
+    const r = await markSeenOnWhatsApp(session.workspace.id, session.user.id, proposalId);
+    revalidatePath(`/proposals/${proposalId}`);
+    return { ok: true, message: r?.message ?? "", url: r?.url ?? null };
   } catch (e) {
     return fail(e);
   }

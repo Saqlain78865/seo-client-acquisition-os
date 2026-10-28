@@ -13,6 +13,8 @@ const SCENES = [
   { key: "won", label: "Won", title: "Client accepts — deal won" },
 ] as const;
 
+export type ReelScene = { key: string; label: string; title: string };
+
 const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 function subscribeMotion(onChange: () => void) {
   const m = window.matchMedia(MOTION_QUERY);
@@ -29,6 +31,27 @@ const v = (vars: Record<string, string | number>) => vars as React.CSSProperties
  * the numbers are illustrative, not workspace data.
  */
 export function HeroReel({ className }: { className?: string }) {
+  return (
+    <Reel
+      scenes={SCENES}
+      label="How it works — 15-second animation"
+      summary="Paste a website, the audit runs, issues are shown with screenshots, a proposal is prepared, and the client accepts it online."
+      className={className}
+      render={(key) => (
+        <>
+          {key === "paste" && <ScenePaste />}
+          {key === "audit" && <SceneAudit />}
+          {key === "proof" && <SceneProof />}
+          {key === "proposal" && <SceneProposal />}
+          {key === "won" && <SceneWon />}
+        </>
+      )}
+    />
+  );
+}
+
+/** The reel's frame: scene timer, pause/replay, step title and progress bar. Scenes are drawn by `render`. */
+export function Reel({ scenes, render, label, summary, className }: { scenes: readonly ReelScene[]; render: (key: string) => React.ReactNode; label: string; summary: string; className?: string }) {
   // `loop` counts plays, so every scene start gets a fresh key and its CSS animations restart.
   const [{ scene, loop }, setPosition] = useState({ scene: 0, loop: 0 });
   // "Reduce motion" starts it paused; the person can still press play.
@@ -50,26 +73,26 @@ export function HeroReel({ className }: { className?: string }) {
     }
     const started = performance.now();
     const budget = remaining.current;
-    const id = setTimeout(() => goTo((scene + 1) % SCENES.length), budget);
+    const id = setTimeout(() => goTo((scene + 1) % scenes.length), budget);
     return () => {
       clearTimeout(id);
       remaining.current = Math.max(0, budget - (performance.now() - started));
     };
-  }, [scene, loop, paused, goTo]);
+  }, [scene, loop, paused, goTo, scenes.length]);
 
   const replay = () => {
     goTo(0);
     setManualPause(false);
   };
 
-  const current = SCENES[scene];
+  const current = scenes[scene];
   return (
     <section
-      aria-label="How it works — 15-second animation"
+      aria-label={label}
       data-paused={paused}
       className={cn("reel relative flex min-h-[330px] flex-col overflow-hidden rounded-3xl bg-gradient-to-br from-[#070b22] via-navy-2 to-[#22175e] text-white shadow-lift", className)}
     >
-      <p className="sr-only">Paste a website, the audit runs, issues are shown with screenshots, a proposal is prepared, and the client accepts it online.</p>
+      <p className="sr-only">{summary}</p>
       {/* Ambient light and grid */}
       <div aria-hidden className="reel-orb pointer-events-none absolute -top-20 -left-16 h-64 w-64 rounded-full bg-primary/45 blur-3xl" />
       <div aria-hidden className="reel-orb pointer-events-none absolute -right-20 -bottom-24 h-72 w-72 rounded-full bg-accent/35 blur-3xl" style={{ animationDelay: "-4s" }} />
@@ -78,7 +101,7 @@ export function HeroReel({ className }: { className?: string }) {
       <header className="relative flex items-center justify-between gap-3 px-5 pt-4">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold tracking-[0.18em] text-white/50 uppercase">
-            Step {scene + 1} of {SCENES.length}
+            Step {scene + 1} of {scenes.length}
           </p>
           <h2 key={`t-${loop}-${scene}`} className="reel-in truncate text-lg font-bold tracking-tight">
             {current.title}
@@ -95,15 +118,11 @@ export function HeroReel({ className }: { className?: string }) {
       </header>
 
       <div key={`s-${loop}-${scene}`} aria-hidden className="relative flex-1 px-5 py-3">
-        {current.key === "paste" && <ScenePaste />}
-        {current.key === "audit" && <SceneAudit />}
-        {current.key === "proof" && <SceneProof />}
-        {current.key === "proposal" && <SceneProposal />}
-        {current.key === "won" && <SceneWon />}
+        {render(current.key)}
       </div>
 
-      <footer className="relative grid grid-cols-5 gap-1.5 px-5 pb-4">
-        {SCENES.map((s, i) => (
+      <footer className="relative grid gap-1.5 px-5 pb-4" style={{ gridTemplateColumns: `repeat(${scenes.length}, minmax(0, 1fr))` }}>
+        {scenes.map((s, i) => (
           <button key={s.key} type="button" onClick={() => goTo(i)} className="group text-left" aria-label={`Show step ${i + 1}: ${s.title}`}>
             <span className="block h-1 overflow-hidden rounded-full bg-white/12">
               {i < scene && <span className="block h-full w-full rounded-full bg-gradient-to-r from-[#a5b4fc] to-[#c4b5fd]" />}
@@ -276,7 +295,7 @@ function SceneProposal() {
 }
 
 /** Counts up with thousands separators (CSS counters cannot add the comma). */
-function CountUp({ to, delayMs, durationMs }: { to: number; delayMs: number; durationMs: number }) {
+export function CountUp({ to, delayMs, durationMs }: { to: number; delayMs: number; durationMs: number }) {
   const [value, setValue] = useState(0);
   useEffect(() => {
     let frame = 0;

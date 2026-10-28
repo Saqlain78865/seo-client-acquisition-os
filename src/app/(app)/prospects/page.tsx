@@ -8,6 +8,7 @@ import { getPipelineStatuses } from "@/lib/workspace";
 import { formatDate, formatMoney } from "@/lib/utils";
 import { Badge, Button, Card, EmptyState, Input, PageHeader, Select, buttonClass, Avatar } from "@/components/ui";
 import { StatusBadge } from "@/components/status-badge";
+import { ProspectsReel } from "../page-reels";
 
 export const metadata: Metadata = { title: "Prospects" };
 
@@ -79,6 +80,8 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Se
           </>
         }
       />
+
+      <ProspectsReel className="mb-6" />
 
       <Card className="mb-4 p-4">
         <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6" role="search">

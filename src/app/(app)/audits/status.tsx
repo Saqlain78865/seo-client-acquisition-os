@@ -5,7 +5,11 @@ const AUDIT_TONES: Record<string, BadgeTone> = { QUEUED: "neutral", RUNNING: "in
 const AUDIT_LABELS: Record<string, string> = { QUEUED: "Queued", RUNNING: "Running", COMPLETED: "Completed", PARTIAL: "Partially completed", FAILED: "Failed" };
 
 export function AuditStatusBadge({ status }: { status: string }) {
-  return <Badge tone={AUDIT_TONES[status] ?? "neutral"}>{AUDIT_LABELS[status] ?? status}</Badge>;
+  return (
+    <Badge tone={AUDIT_TONES[status] ?? "neutral"} title={status === "PARTIAL" ? "Findings are ready; one or more steps (often the AI summary when Gemini is busy) did not finish. Open the audit to see which, and Retry." : undefined}>
+      {AUDIT_LABELS[status] ?? status}
+    </Badge>
+  );
 }
 
 const SEVERITY_TONES: Record<Severity, BadgeTone> = {
