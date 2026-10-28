@@ -23,9 +23,22 @@ Run this from the project root, after `npm install` there:
 ```powershell
 cd desktop
 npm install
+cd app; npm install; cd ..             # electron-updater, packed into the app
 node node_modules/electron/install.js   # downloads Electron if npm skipped install scripts
-npm run dist                            # → %LOCALAPPDATA%\seo-os-desktop-build\SEO-Acquisition-OS-Setup-<version>.exe
+npm run dist                            # → %LOCALAPPDATA%\seo-os-desktop-build\LeadLift-Setup-<version>.exe
 ```
+
+## Ship an update
+
+Installed apps check this repository's GitHub releases at start and every 6 hours, download a newer version in the background and ask before restarting. The database is copied to `backups\` in the data folder before a new version first opens it.
+
+1. Raise `version` in `desktop/app/package.json` (e.g. `0.1.0` → `0.2.0`).
+2. `npm run dist` (building never uploads anything).
+3. On GitHub create a release tagged `v0.2.0` and attach three files from `%LOCALAPPDATA%\seo-os-desktop-build`: `LeadLift-Setup-0.2.0.exe`, `LeadLift-Setup-0.2.0.exe.blockmap` and `latest.yml`.
+
+## Backup and restore
+
+**File → Back up data…** (or **System → Backup & updates** in the app) saves one `.zip` with the database, saved PDFs and screenshots, and `config.json` — which holds the key that unlocks saved credentials, so keep backups private. **Restore from backup…** saves the current data to `backups\` first, then replaces it and restarts.
 
 The installer is built outside the project folder on purpose: OneDrive locks files while it syncs, which breaks electron-builder. `after-pack.cjs` adds the server's `node_modules`, which electron-builder always leaves out of extra resources.
 

@@ -45,6 +45,7 @@ for (const pkg of ["playwright", "playwright-core"]) {
 console.log("  copied playwright and playwright-core in full");
 fs.copyFileSync(path.join(here, "desktop-migrate.cjs"), path.join(server, "desktop-migrate.cjs"));
 fs.copyFileSync(path.join(here, "desktop-server.cjs"), path.join(server, "desktop-server.cjs"));
+fs.copyFileSync(path.join(here, "desktop-backup.cjs"), path.join(server, "desktop-backup.cjs"));
 
 step("Copying migrations");
 fs.cpSync(path.join(root, "prisma", "migrations"), path.join(out, "migrations"), { recursive: true });

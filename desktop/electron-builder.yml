@@ -31,3 +31,10 @@ nsis:
   # Keep the user's data (database, PDFs, settings) when the app is uninstalled or updated.
   deleteAppDataOnUninstall: false
 artifactName: LeadLift-Setup-${version}.${ext}
+# Installed apps look for new versions in this repository's GitHub releases (latest.yml + installer).
+# Building never uploads anything; a release is published by hand.
+publish:
+  provider: github
+  owner: Saqlain78865
+  repo: seo-client-acquisition-os
+  releaseType: release

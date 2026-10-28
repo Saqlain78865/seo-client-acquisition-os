@@ -4,5 +4,8 @@
   "version": "0.1.0",
   "description": "Website audit, proposals and client work for SEO consultants",
   "author": "Saqlain Nazir",
-  "main": "main.cjs"
+  "main": "main.cjs",
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  }
 }

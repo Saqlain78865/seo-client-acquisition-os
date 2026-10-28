@@ -7,6 +7,7 @@ import { JOB_STATUSES, RETENTION, listJobs, runHealthChecks, type HealthCheck } 
 import { formatDate } from "@/lib/utils";
 import { Alert, Badge, Card, CardHeader, EmptyState, PageHeader, buttonClass, type BadgeTone, tabBarClass, tabClass } from "@/components/ui";
 import { JobButtons, MaintenanceButton } from "./controls";
+import { DesktopCard } from "./desktop-card";
 
 export const metadata: Metadata = { title: "System" };
 
@@ -103,6 +104,7 @@ export default async function SystemPage({ searchParams }: { searchParams: Promi
         </div>
 
         <div className="space-y-6">
+          {isOwner && <DesktopCard />}
           <Card>
             <CardHeader title="Data retention" description="Runs automatically once a day." />
             <div className="space-y-3 p-5 text-sm">
