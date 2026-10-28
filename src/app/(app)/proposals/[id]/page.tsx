@@ -10,7 +10,7 @@ import { formatDate, timeAgo } from "@/lib/utils";
 import { Alert, Badge, Card, CardHeader, PageHeader, buttonClass } from "@/components/ui";
 import { ProposalStatusBadge } from "../status";
 import { duplicateProposalAction } from "../actions";
-import { PdfButton, ReadyToggle } from "./client-bits";
+import { PdfButton, ReadyToggle, TranslateButtons } from "./client-bits";
 import { ShareCard } from "./share-card";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { whatsAppDraft } from "@/lib/messaging/service";
@@ -149,6 +149,11 @@ export default async function ProposalPage({ params, searchParams }: { params: P
             {isLatest && proposal.status !== "SENT" && (
               <div className="border-t border-border p-5">
                 <ReadyToggle proposalId={proposal.id} ready={proposal.status === "READY"} />
+              </div>
+            )}
+            {isLatest && (
+              <div className="border-t border-border p-5">
+                <TranslateButtons proposalId={proposal.id} />
               </div>
             )}
           </Card>

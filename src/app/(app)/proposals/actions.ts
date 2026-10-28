@@ -18,6 +18,7 @@ import {
   versionPayloadSchema,
 } from "@/lib/proposals/service";
 import type { ProposalKeyword, RoadmapKey, RoadmapPhase, ServiceKey } from "@/lib/proposals/types";
+import { translateProposal, type TranslationLanguage } from "@/lib/proposals/translate";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -84,6 +85,18 @@ export async function setReadyAction(proposalId: string, ready: boolean): Promis
     await setProposalReady(session.workspace.id, session.user.id, proposalId, ready);
     revalidatePath(`/proposals/${proposalId}`);
     return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Saves an Urdu or Arabic copy of the latest version as a new version (Gemini). */
+export async function translateProposalAction(proposalId: string, language: TranslationLanguage): Promise<Result<{ version: number }>> {
+  const session = await requireSession();
+  try {
+    const r = await translateProposal(session.workspace.id, session.user.id, proposalId, language);
+    revalidatePath(`/proposals/${proposalId}`);
+    return { ok: true, version: r.version };
   } catch (e) {
     return fail(e);
   }

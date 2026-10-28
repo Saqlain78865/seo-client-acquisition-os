@@ -427,6 +427,9 @@ export function renderProposalHtml(v: RenderVersion, client: RenderClient) {
     return screens?.desktop ? (v.images?.[screens.desktop] ?? null) : null;
   })();
   const snap = snapshot(v);
+  // A translated (Urdu/Arabic) proposal reads right to left; Urdu uses Nastaliq where the font is installed.
+  const rtl = /[؀-ۿ]/.test(v.title);
+  const lang = !rtl ? "en" : /[ٹڈڑںھہے]/.test(v.title + (sections[0]?.body ?? "")) ? "ur" : "ar";
 
   const body = sections
     .map((s, i) => {
@@ -442,7 +445,7 @@ export function renderProposalHtml(v: RenderVersion, client: RenderClient) {
     .join("");
 
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="${lang}" dir="${rtl ? "rtl" : "ltr"}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(v.title)}</title>
 <style>
@@ -596,6 +599,11 @@ export function renderProposalHtml(v: RenderVersion, client: RenderClient) {
     .ggrid, .with-shot, .gbp, .devices, .beforeafter, .tiles, .prio, ol.steps, .reviews, .finding.compact .fgrid { grid-template-columns: 1fr; }
     .cover { padding: 14mm 8mm; } .cover h1 { font-size: 26pt; } .glance, main { padding: 10mm 6mm; }
   }
+  [dir=rtl] body { font-size: 11.5pt; line-height: 1.9; }
+  [lang=ur] body { font-family: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", "Urdu Typesetting", "Segoe UI", "Noto Naskh Arabic", Arial, sans-serif; line-height: 2.1; }
+  [dir=rtl] .cover h1 { letter-spacing: 0; line-height: 1.5; }
+  [dir=rtl] .mini { margin-right: 0; margin-left: 4px; }
+  [dir=rtl] a, [dir=rtl] .url { direction: ltr; unicode-bidi: embed; }
 </style></head>
 <body>
 <svg width="0" height="0" style="position:absolute"><defs><linearGradient id="half"><stop offset="50%" stop-color="#f59e0b"/><stop offset="50%" stop-color="#e2e8f0"/></linearGradient></defs></svg>
