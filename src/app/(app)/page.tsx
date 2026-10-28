@@ -7,7 +7,9 @@ import {
   Clock,
   FileSearch,
   FileText,
+  Mail,
   Send,
+  Target,
   ThumbsDown,
   Trophy,
   Users,
@@ -23,6 +25,11 @@ import { cn } from "@/lib/utils";
 import { DeliveryChart, HorizontalBarChart, ProspectsOverTimeChart } from "./dashboard-charts";
 import { QuickAudit } from "./quick-audit";
 import { HeroReel } from "./hero-reel";
+import { todayList, type TodayReason } from "@/lib/today";
+import { WhatsAppIcon } from "@/components/whatsapp-button";
+
+const TODAY_LABELS: Record<TodayReason, string> = { RESPONDED: "Replied", READING: "Reading now", DUE: "Follow-up due", UNOPENED: "Not opened" };
+const TODAY_TONES = { RESPONDED: "success", READING: "info", DUE: "warning", UNOPENED: "neutral" } as const;
 
 const KPI_TONES = {
   indigo: "from-[#6366f1] to-[#8b5cf6]",
@@ -74,9 +81,10 @@ function Money({ values }: { values: MoneyByCurrency }) {
 
 export default async function OverviewPage() {
   const session = await requireSession();
-  const [d, latest] = await Promise.all([
+  const [d, latest, today] = await Promise.all([
     getDashboardData(session.workspace.id),
     db.activityLog.findMany({ where: { workspaceId: session.workspace.id, prospectId: { not: null } }, orderBy: { createdAt: "desc" }, take: 6, select: { message: true, createdAt: true, prospect: { select: { businessName: true } } } }),
+    todayList(session.workspace.id),
   ]);
   // Real recent events for the live ticker in the hero.
   const ticker = latest.map((a) => ({
@@ -101,6 +109,44 @@ export default async function OverviewPage() {
         <QuickAudit ticker={ticker} />
         <HeroReel />
       </div>
+
+      <Card className="reveal mb-6">
+        <CardHeader title="Who to contact today" description="Ranked from replies, proposal reads and due reminders — you send every message yourself" />
+        {today.length === 0 ? (
+          <EmptyState icon={<Target className="h-5 w-5" />} title="Nobody waiting on you" description="People who read your proposal, ask a question or have a reminder due will show here." />
+        ) : (
+          <ul className="divide-y divide-border text-sm">
+            {today.map((t) => (
+              <li key={t.prospectId} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <Badge tone={TODAY_TONES[t.reason]}>{TODAY_LABELS[t.reason]}</Badge>
+                <span className="min-w-0 flex-1">
+                  <Link href={`/prospects/${t.prospectId}`} className="block truncate font-medium hover:text-primary">
+                    {t.businessName}
+                  </Link>
+                  <span className="block truncate text-xs text-muted">{t.why}</span>
+                </span>
+                <span className="flex shrink-0 gap-2">
+                  {t.proposalId && t.hasEmail && (
+                    <Link href={`/proposals/${t.proposalId}/send?followup=1`} className={buttonClass("secondary", "sm")}>
+                      <Mail className="h-3.5 w-3.5" aria-hidden /> Email
+                    </Link>
+                  )}
+                  {t.whatsappUrl && (
+                    <a href={t.whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-[#25D366] px-2.5 text-xs font-semibold text-white hover:brightness-95">
+                      <WhatsAppIcon className="h-3.5 w-3.5" /> WhatsApp
+                    </a>
+                  )}
+                  {!t.hasEmail && !t.whatsappUrl && (
+                    <Link href={`/prospects/${t.prospectId}`} className={buttonClass("ghost", "sm")}>
+                      Open
+                    </Link>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <section aria-label="Key metrics" className="stagger grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Kpi label="Total prospects" value={k.totalProspects} icon={Users} href="/prospects" tone="indigo" />
