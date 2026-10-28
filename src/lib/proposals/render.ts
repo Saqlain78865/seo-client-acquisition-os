@@ -349,7 +349,13 @@ function sectionExtras(key: string, data: unknown, v: RenderVersion, client: Ren
   if (key === "audit_overview" && d.screens) {
     const desk = img(d.screens.desktop);
     const mob = img(d.screens.mobile);
-    if (desk || mob) return `<div class="devices">${desk ? browserFrame(desk, `${client.businessName} on a computer`) : ""}${mob ? phoneFrame(mob) : ""}</div>`;
+    const after = img(d.screens.after);
+    const devices = desk || mob ? `<div class="devices">${desk ? browserFrame(desk, `${client.businessName} on a computer`) : ""}${mob ? phoneFrame(mob) : ""}</div>` : "";
+    const beforeAfter =
+      desk && after
+        ? `<h3 class="ptitle">Today, and after our first changes</h3><div class="beforeafter"><figure><figcaption class="ba-now">Today</figcaption>${browserFrame(desk)}</figure><figure><figcaption class="ba-after">After our work</figcaption>${browserFrame(after)}</figure></div><p class="muted small">Illustrative mockup drawn on your live homepage: green tags mark what we would change. Final design and wording are agreed with you.</p>`
+        : "";
+    if (devices || beforeAfter) return devices + beforeAfter;
   }
   if (key === "gbp" && d.gbp) return gbpBlock(d.gbp);
   if (key === "reputation" && d.reviews?.length) return reviewCards(d.reviews);
@@ -539,6 +545,10 @@ export function renderProposalHtml(v: RenderVersion, client: RenderClient) {
   .browser .bar i { width: 2.2mm; height: 2.2mm; border-radius: 50%; background: #cbd5e1; } .browser .bar i:first-child { background: #f87171; } .browser .bar i:nth-child(2) { background: #fbbf24; } .browser .bar i:nth-child(3) { background: #34d399; }
   .browser img { display: block; width: 100%; } .browser figcaption { font-size: 7.5pt; color: var(--muted); padding: 1.5mm 3mm; background: #f8fafc; border-top: 1px solid var(--border); }
   .devices { display: grid; grid-template-columns: 1fr 48mm; gap: 7mm; align-items: end; margin: 3mm 0 2mm; }
+  .beforeafter { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin: 3mm 0 2mm; break-inside: avoid; }
+  .beforeafter figure { margin: 0; }
+  .beforeafter figcaption { display: inline-block; margin-bottom: 2mm; padding: 1mm 3mm; border-radius: 99px; font-size: 9pt; font-weight: 700; }
+  .ba-now { background: #f1f5f9; color: #475569; } .ba-after { background: #dcfce7; color: #15803d; }
   .phone { margin: 0; border: 3mm solid #0f172a; border-radius: 9mm; overflow: hidden; background: #0f172a; position: relative; box-shadow: 0 12px 28px rgba(15,23,42,.25); }
   .phone .notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 16mm; height: 3.5mm; background: #0f172a; border-radius: 0 0 3mm 3mm; z-index: 1; }
   .phone img { display: block; width: 100%; border-radius: 6mm; }
@@ -583,7 +593,7 @@ export function renderProposalHtml(v: RenderVersion, client: RenderClient) {
     .glance, main { background: #fff; padding: 16mm 15mm; margin-bottom: 8mm; box-shadow: 0 10px 30px rgba(15,23,42,.08); }
   }
   @media screen and (max-width: 700px) {
-    .ggrid, .with-shot, .gbp, .devices, .tiles, .prio, ol.steps, .reviews, .finding.compact .fgrid { grid-template-columns: 1fr; }
+    .ggrid, .with-shot, .gbp, .devices, .beforeafter, .tiles, .prio, ol.steps, .reviews, .finding.compact .fgrid { grid-template-columns: 1fr; }
     .cover { padding: 14mm 8mm; } .cover h1 { font-size: 26pt; } .glance, main { padding: 10mm 6mm; }
   }
 </style></head>

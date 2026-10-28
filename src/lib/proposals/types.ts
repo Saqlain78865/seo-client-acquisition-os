@@ -89,7 +89,7 @@ export const proposalReviewSchema = z.object({ rating: z.number().int().min(1).m
 export type ProposalReview = z.infer<typeof proposalReviewSchema>;
 
 /** Homepage screenshots (storage keys) for "how your website looks today". */
-export const proposalScreensSchema = z.object({ desktop: z.string().max(300).nullable(), mobile: z.string().max(300).nullable() });
+export const proposalScreensSchema = z.object({ desktop: z.string().max(300).nullable(), mobile: z.string().max(300).nullable(), after: z.string().max(300).nullable().optional() });
 export type ProposalScreens = z.infer<typeof proposalScreensSchema>;
 
 export const deliverableSchema = z.object({ title: z.string().min(1).max(160), detail: z.string().max(500).default("") });

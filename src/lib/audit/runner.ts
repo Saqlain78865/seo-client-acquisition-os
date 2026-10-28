@@ -14,6 +14,7 @@ import { identifyBusiness, type BusinessProfile } from "./business";
 import { checkDomain, type DomainOverview } from "../research/domain";
 import { captureScreenshots, type ShotTarget } from "../crawler/screenshot";
 import { putFile } from "../storage";
+import { cleanServicePhrase } from "../research/keywords";
 import { domainFindings } from "./domain-findings";
 import { priorityFor, runRules } from "./rules";
 import { AUDIT_STAGES, type StageKey, type StageStatus } from "./stages";
@@ -559,6 +560,25 @@ export async function runAudit(auditId: string) {
             caption: f.title,
           })),
         ];
+        // An illustrative "after" view of the homepage with the first improvements drawn on it.
+        const name = (await db.prospect.findUnique({ where: { id: audit.prospectId }, select: { businessName: true } }))?.businessName ?? audit.prospect.businessName;
+        const service = cleanServicePhrase(context.primaryService ?? business.services[0]?.value ?? "");
+        const area = context.targetCity ?? audit.prospect.city ?? null;
+        const titleCase = (t: string) => t.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+        const needsCallButton = findings.some((f) => f.ruleId === "cro.no-click-to-call-home" || f.ruleId === "cro.no-contact-path");
+        const profile = await db.gbpProfile.findFirst({ where: { prospectId: audit.prospectId }, orderBy: { fetchedAt: "desc" }, select: { rating: true, reviewCount: true } });
+        targets.push({
+          url: input.homepageUrl,
+          device: "desktop",
+          kind: "HOMEPAGE_AFTER",
+          caption: "Homepage after our first changes (illustrative)",
+          mockup: {
+            headline: service ? `${titleCase(service)}${area ? ` in ${area}` : ""} — ${name}` : `${name}${area ? ` — ${area}` : ""}`,
+            phone: needsCallButton ? (contacts.find((c) => c.type === "PHONE")?.value ?? "call") : null,
+            whatsapp: needsCallButton ? (contacts.find((c) => c.type === "WHATSAPP")?.value ?? "whatsapp") : null,
+            rating: profile?.rating != null && (profile.reviewCount ?? 0) > 0 ? { value: profile.rating, count: profile.reviewCount ?? 0 } : null,
+          },
+        });
         const shots = await captureScreenshots(targets, guard);
         await db.auditScreenshot.deleteMany({ where: { auditId } });
         let saved = 0;

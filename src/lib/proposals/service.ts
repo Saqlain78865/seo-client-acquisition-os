@@ -149,7 +149,7 @@ export async function createProposal(workspaceId: string, userId: string, input:
     audit ? db.auditScreenshot.findMany({ where: { auditId: audit.id } }) : [],
   ]);
   const services = defaultServices(findings, { audit: genAudit, prospect, gbp, badReviews: negative });
-  const screens = { desktop: shots.find((x) => x.kind === "HOMEPAGE_DESKTOP")?.storageKey ?? null, mobile: shots.find((x) => x.kind === "HOMEPAGE_MOBILE")?.storageKey ?? null };
+  const screens = { desktop: shots.find((x) => x.kind === "HOMEPAGE_DESKTOP")?.storageKey ?? null, mobile: shots.find((x) => x.kind === "HOMEPAGE_MOBILE")?.storageKey ?? null, after: shots.find((x) => x.kind === "HOMEPAGE_AFTER")?.storageKey ?? null };
   const screenshots = Object.fromEntries(shots.filter((x) => x.kind === "FINDING" && x.ruleId).map((x) => [x.ruleId!, x.storageKey]));
   const roadmap: RoadmapKey = "90_DAY";
   const sections = generateSections({
@@ -224,10 +224,11 @@ export async function getProposalWithVersion(workspaceId: string, proposalId: st
 export async function withImages(rv: RenderVersion, workspaceId: string): Promise<RenderVersion> {
   const keys = new Set<string>();
   for (const s of rv.sections) {
-    const d = (s.data ?? {}) as { findings?: { screenshot?: string | null }[]; screens?: { desktop: string | null; mobile: string | null } };
+    const d = (s.data ?? {}) as { findings?: { screenshot?: string | null }[]; screens?: { desktop: string | null; mobile: string | null; after?: string | null } };
     for (const f of d.findings ?? []) if (f.screenshot) keys.add(f.screenshot);
     if (d.screens?.desktop) keys.add(d.screens.desktop);
     if (d.screens?.mobile) keys.add(d.screens.mobile);
+    if (d.screens?.after) keys.add(d.screens.after);
   }
   const prefix = `screenshots/${workspaceId}/`;
   const images: Record<string, string> = {};
