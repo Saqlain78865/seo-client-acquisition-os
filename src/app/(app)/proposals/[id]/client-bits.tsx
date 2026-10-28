@@ -33,7 +33,7 @@ export function TranslateButtons({ proposalId }: { proposalId: string }) {
   const router = useRouter();
   const run = (language: "ur" | "ar", name: string) =>
     start(async () => {
-      toast.info(`Translating into ${name} — this takes about a minute…`);
+      toast.info(`Translating into ${name} — this takes 2–4 minutes, keep this page open…`, { duration: 10000 });
       const r = await translateProposalAction(proposalId, language);
       if (!r.ok) return void toast.error(r.error);
       toast.success(`${name} copy saved as version ${r.version}. Check it before sending.`);

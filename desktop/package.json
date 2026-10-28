@@ -6,7 +6,7 @@
   "scripts": {
     "prepare-app": "node build.mjs",
     "start": "electron app",
-    "dist": "node build.mjs && electron-builder --win nsis --publish never -c.directories.output=%LOCALAPPDATA%/seo-os-desktop-build"
+    "dist": "node build.mjs && node dist.mjs"
   },
   "devDependencies": {
     "electron": "45.0.0",
