@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth";
 import { reportError, withReference } from "@/lib/log";
 import { ResearchError, fetchGbpProfile, saveManualGbp, chooseTopKeywords, setKeywordInProposal, addCompetitor, addManualKeywords, analyseKeywords, deleteImport, generateAiKeywordIdeas, generateSeedKeywords, observeCompetitor, runDomainCheck, runPerformanceTest } from "@/lib/research/service";
 import type { Strategy } from "@/lib/research/pagespeed";
+import { draftGbpContent, type GbpDrafts } from "@/lib/research/gbp-drafts";
 
 export type ResearchResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -16,6 +17,17 @@ async function run(prospectId: string, fn: (workspaceId: string, userId: string)
     const message = await fn(session.workspace.id, session.user.id);
     revalidatePath(`/prospects/${prospectId}/research`);
     return { ok: true, message };
+  } catch (e) {
+    if (e instanceof ResearchError) return { ok: false, error: e.message };
+    return { ok: false, error: withReference("Something went wrong. Please try again.", await reportError("research", e)) };
+  }
+}
+
+/** Review replies and weekly Google posts drafted by Gemini; returned for copying, never posted. */
+export async function gbpDraftsAction(prospectId: string): Promise<{ ok: true; drafts: GbpDrafts } | { ok: false; error: string }> {
+  const session = await requireSession();
+  try {
+    return { ok: true, drafts: await draftGbpContent(session.workspace.id, prospectId) };
   } catch (e) {
     if (e instanceof ResearchError) return { ok: false, error: e.message };
     return { ok: false, error: withReference("Something went wrong. Please try again.", await reportError("research", e)) };

@@ -3,6 +3,7 @@ import { badReviews, gbpIssues, type GbpData } from "@/lib/research/gbp";
 import { formatDate, cn } from "@/lib/utils";
 import { Alert, Badge, Card, CardHeader, EmptyState } from "@/components/ui";
 import { FetchGbpForm, ManualGbpForm } from "./gbp-controls";
+import { GbpDraftsCard } from "./gbp-drafts";
 
 const SEV_TONE = { CRITICAL: "danger", HIGH: "danger", MEDIUM: "warning", LOW: "neutral" } as const;
 
@@ -166,6 +167,7 @@ export function GbpPanel({
           </div>
         </div>
       )}
+      {gbp && <GbpDraftsCard prospectId={prospectId} />}
     </div>
   );
 }
