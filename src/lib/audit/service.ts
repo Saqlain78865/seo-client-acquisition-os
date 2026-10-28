@@ -51,7 +51,7 @@ export async function startAuditFromGbpLink(workspaceId: string, userId: string,
 }
 
 /** Validates the URL, links or creates the prospect, records the audit and queues it. */
-export async function startAudit(workspaceId: string, userId: string, req: AuditRequest, opts: { batchId?: string; quick?: boolean; primary?: "GBP" } = {}) {
+export async function startAudit(workspaceId: string, userId: string, req: AuditRequest, opts: { batchId?: string; quick?: boolean; primary?: "GBP"; reaudit?: boolean } = {}) {
   // Any page link (a product page, a blog post…) audits the whole website: the audit and the
   // prospect use the site's home address; the pasted link is kept as the audit's input.
   const normalizedUrl = `${new URL(normalizeWebsiteUrl(req.websiteUrl)).origin}/`;
@@ -109,6 +109,8 @@ export async function startAudit(workspaceId: string, userId: string, req: Audit
         quick: opts.quick || undefined,
         // "GBP" when the audit was started from a Google Business Profile link: the proposal leads with the profile.
         primary: opts.primary,
+        // The monthly check of a won client's site (progress report), not a new sales audit.
+        reaudit: opts.reaudit || undefined,
         targetCountry: req.targetCountry,
         targetCity: req.targetCity,
         primaryService: req.primaryService,
@@ -123,7 +125,7 @@ export async function startAudit(workspaceId: string, userId: string, req: Audit
     },
   });
   await enqueueJob(workspaceId, JOB_TYPES.AUDIT_RUN, { auditId: audit.id });
-  await logActivity({ workspaceId, prospectId: prospect.id, userId, type: ACTIVITY_TYPES.AUDIT_STARTED, message: `Website audit started for ${host}`, metadata: { auditId: audit.id } });
+  await logActivity({ workspaceId, prospectId: prospect.id, userId, type: ACTIVITY_TYPES.AUDIT_STARTED, message: opts.reaudit ? `Monthly progress check started for ${host}` : `Website audit started for ${host}`, metadata: { auditId: audit.id } });
   return { audit, prospect, createdProspect };
 }
 

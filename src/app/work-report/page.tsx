@@ -5,7 +5,22 @@ import { ArrowLeft, CheckCircle2, Circle } from "lucide-react";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isMonthKey, monthKey, monthLabel, workReport } from "@/lib/client-work";
+import { progressReport } from "@/lib/progress";
 import { PrintButton } from "./print-button";
+
+const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone: string }) {
+  return (
+    <div className="rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-3">
+      <p className="text-xs text-[#64748b]">{label}</p>
+      <p className="mt-1 text-xl font-bold tabular-nums" style={{ color: tone }}>
+        {value}
+      </p>
+      {hint && <p className="text-xs text-[#64748b]">{hint}</p>}
+    </div>
+  );
+}
 
 export const metadata: Metadata = { title: "Monthly work report", robots: { index: false } };
 
@@ -17,6 +32,7 @@ export default async function WorkReportPage({ searchParams }: { searchParams: P
   if (!sp.client) notFound();
   const report = await workReport(session.workspace.id, sp.client, month);
   if (!report) notFound();
+  const progress = await progressReport(session.workspace.id, report.client.id);
   const settings = await db.workspaceSettings.findUnique({ where: { workspaceId: session.workspace.id }, select: { companyName: true, consultantName: true, brandColor: true } });
   const brand = settings?.brandColor || "#4f46e5";
   const total = report.done.length + report.open.length;
@@ -48,6 +64,58 @@ export default async function WorkReportPage({ searchParams }: { searchParams: P
             </span>
           </div>
         </header>
+
+        {progress && (
+          <section className="border-b border-[#e2e8f0] px-10 py-8 break-inside-avoid">
+            <h2 className="text-lg font-bold">Your website: before our work and now</h2>
+            <p className="mt-1 text-sm text-[#64748b]">
+              First audit {fmt(progress.before.date)} · latest check {fmt(progress.now.date)}
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Problems fixed" value={String(progress.fixed.length)} tone="#16a34a" />
+              <Stat label="Still to fix" value={String(progress.remaining.length)} tone="#b45309" />
+              {progress.speed.before != null && progress.speed.now != null && <Stat label="Mobile speed score" value={`${Math.round(progress.speed.before)} → ${Math.round(progress.speed.now)}`} tone={brand} />}
+              {progress.reviews.before && progress.reviews.now && (progress.reviews.now.count ?? 0) > 0 && (
+                <Stat label="Google reviews" value={`${progress.reviews.before.count ?? 0} → ${progress.reviews.now.count}`} hint={progress.reviews.now.rating ? `★ ${progress.reviews.now.rating.toFixed(1)}` : undefined} tone={brand} />
+              )}
+            </div>
+            <table className="mt-5 w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-[#64748b]">
+                  <th className="py-1 font-medium">Issue level</th>
+                  <th className="py-1 text-right font-medium">Before</th>
+                  <th className="py-1 text-right font-medium">Now</th>
+                </tr>
+              </thead>
+              <tbody>
+                {progress.severity.map((s) => (
+                  <tr key={s.key} className="border-t border-[#f1f5f9]">
+                    <td className="py-1.5 capitalize">{s.key.toLowerCase()}</td>
+                    <td className="py-1.5 text-right tabular-nums">{s.before}</td>
+                    <td className={`py-1.5 text-right font-semibold tabular-nums ${s.now < s.before ? "text-[#16a34a]" : s.now > s.before ? "text-[#dc2626]" : ""}`}>{s.now}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {progress.fixed.length > 0 && (
+              <>
+                <h3 className="mt-6 text-sm font-bold">Fixed since we started</h3>
+                <ul className="mt-2 space-y-1.5 text-sm">
+                  {progress.fixed.slice(0, 12).map((f) => (
+                    <li key={f.ruleId} className="flex gap-2">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#16a34a]" /> {f.title}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {progress.newIssues.length > 0 && (
+              <p className="mt-4 text-xs text-[#64748b]">
+                {progress.newIssues.length} new item{progress.newIssues.length === 1 ? "" : "s"} found in the latest check (for example after site changes) — we will review them next month.
+              </p>
+            )}
+          </section>
+        )}
 
         <section className="px-10 py-8">
           <h2 className="text-lg font-bold">Completed this month</h2>

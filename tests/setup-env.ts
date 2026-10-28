@@ -6,3 +6,4 @@ process.env.ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 process.env.STORAGE_DIR = path.resolve(__dirname, "../test-storage");
 process.env.DISABLE_MAINTENANCE = "true";
 process.env.DISABLE_CAMPAIGNS = "true";
+process.env.DISABLE_REAUDITS = "true";
