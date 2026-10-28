@@ -129,6 +129,19 @@ export async function mapsRankings(apiKey: string, placeId: string, queries: str
 export async function fetchGbp(apiKey: string, q: { businessName: string; domain: string; city: string | null; queries: string[] }, fetchImpl: typeof fetch = fetch): Promise<GbpData> {
   const placeId = await findPlace(apiKey, q, fetchImpl);
   if (!placeId) throw new GbpError(`No Google Business Profile found for “${q.businessName}”${q.city ? ` in ${q.city}` : ""}. Check the business name, or enter the profile details by hand.`, "NOT_FOUND");
+  return fetchGbpByPlaceId(apiKey, placeId, q.businessName, q.queries, fetchImpl);
+}
+
+/** The place that a Google Maps link points to: the best text match near the link's map position. */
+export async function findPlaceFromLink(apiKey: string, link: { name: string; lat: number | null; lng: number | null }, fetchImpl: typeof fetch = fetch) {
+  const body: Record<string, unknown> = { textQuery: link.name, pageSize: 5 };
+  if (link.lat != null && link.lng != null) body.locationBias = { circle: { center: { latitude: link.lat, longitude: link.lng }, radius: 2000 } };
+  const r = await places<{ places?: PlaceSummary[] }>(apiKey, "/places:searchText", { method: "POST", fieldMask: "places.id,places.displayName,places.websiteUri,places.formattedAddress", body }, fetchImpl);
+  return r.places?.[0]?.id ?? null;
+}
+
+export async function fetchGbpByPlaceId(apiKey: string, placeId: string, fallbackName: string, queries: string[], fetchImpl: typeof fetch = fetch): Promise<GbpData> {
+  const q = { businessName: fallbackName, queries };
   const d = await places<PlaceDetails>(apiKey, `/places/${encodeURIComponent(placeId)}`, { method: "GET", fieldMask: DETAIL_FIELDS }, fetchImpl);
   return {
     source: "PLACES_API",

@@ -11,8 +11,47 @@ import type { AuditRequest } from "../validation";
 
 export class AuditRequestError extends Error {}
 
+/**
+ * A Google Business Profile / Maps link instead of a website: the profile is read with the Places API
+ * (saved first, as the main subject), then the website on the profile is audited as the second part.
+ * Without a Places key there is no allowed way to read the profile, so the user is told what to do.
+ */
+export async function startAuditFromGbpLink(workspaceId: string, userId: string, req: AuditRequest) {
+  const { getApiKey } = await import("../integrations");
+  const { resolveGbpLink } = await import("../research/gbp-link");
+  const { GbpError, fetchGbpByPlaceId, findPlaceFromLink } = await import("../research/gbp");
+  const key = await getApiKey(workspaceId, "PLACES");
+  if (!key) {
+    throw new AuditRequestError(
+      "This is a Google Business Profile link. Reading a profile needs a Google key with the Places API (free monthly quota) on the Integrations page. Until then, paste the business's website address instead — you can add the profile details by hand on its Research page.",
+    );
+  }
+  let link;
+  try {
+    link = await resolveGbpLink(req.websiteUrl);
+  } catch {
+    throw new AuditRequestError("This Google Maps link could not be opened. Copy it again from the profile's Share button.");
+  }
+  if (!link.name) throw new AuditRequestError("The link does not name a business. Copy it from the profile's Share button and try again.");
+  let profile;
+  try {
+    const placeId = await findPlaceFromLink(key, { name: link.name, lat: link.lat, lng: link.lng });
+    if (!placeId) throw new GbpError(`No Google Business Profile found for “${link.name}”.`, "NOT_FOUND");
+    profile = await fetchGbpByPlaceId(key, placeId, link.name, []);
+  } catch (e) {
+    throw new AuditRequestError(e instanceof GbpError ? e.message : "Google Places could not be reached. Try again in a moment.");
+  }
+  if (!profile.website) {
+    throw new AuditRequestError(`${profile.name} has no website on its Google profile, so there is no website to audit. Add their website address if they have one.`);
+  }
+  const started = await startAudit(workspaceId, userId, { ...req, websiteUrl: profile.website, clientName: req.clientName || profile.name }, { primary: "GBP" });
+  const { saveGbp } = await import("../research/service");
+  await saveGbp(workspaceId, userId, started.prospect.id, { ...profile, mapsUrl: profile.mapsUrl ?? link.url });
+  return started;
+}
+
 /** Validates the URL, links or creates the prospect, records the audit and queues it. */
-export async function startAudit(workspaceId: string, userId: string, req: AuditRequest, opts: { batchId?: string; quick?: boolean } = {}) {
+export async function startAudit(workspaceId: string, userId: string, req: AuditRequest, opts: { batchId?: string; quick?: boolean; primary?: "GBP" } = {}) {
   // Any page link (a product page, a blog post…) audits the whole website: the audit and the
   // prospect use the site's home address; the pasted link is kept as the audit's input.
   const normalizedUrl = `${new URL(normalizeWebsiteUrl(req.websiteUrl)).origin}/`;
@@ -68,6 +107,8 @@ export async function startAudit(workspaceId: string, userId: string, req: Audit
       batchId: opts.batchId,
       context: {
         quick: opts.quick || undefined,
+        // "GBP" when the audit was started from a Google Business Profile link: the proposal leads with the profile.
+        primary: opts.primary,
         targetCountry: req.targetCountry,
         targetCity: req.targetCity,
         primaryService: req.primaryService,

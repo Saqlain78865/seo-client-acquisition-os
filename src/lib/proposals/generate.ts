@@ -43,7 +43,7 @@ export type GenerateInput = {
   audit: {
     createdAt: Date;
     summary: string | null;
-    context: { targetCity?: string; targetCountry?: string; primaryService?: string; secondaryServices?: string; businessType?: string; discoveryNotes?: string };
+    context: { targetCity?: string; targetCountry?: string; primaryService?: string; secondaryServices?: string; businessType?: string; discoveryNotes?: string; primary?: string };
     scope: { pagesAnalysed: number; pageLimit: number; limitReached: boolean; collectedAt: string } | null;
     business: { name: string | null; services: string[]; locations: string[] } | null;
     aiExplanations: Record<string, string>;
@@ -468,7 +468,7 @@ export function generateSections(input: GenerateInput): SectionDraft[] {
   // Kept short for the client: the small print is available in the editor but starts hidden.
   const hiddenByDefault = new Set(["competitors", "exclusions", "timeline", "assumptions"]);
 
-  return SECTION_DEFS.map((def) => {
+  const sections = SECTION_DEFS.map((def) => {
     const svc = serviceSection[def.key];
     return {
       key: def.key,
@@ -478,6 +478,14 @@ export function generateSections(input: GenerateInput): SectionDraft[] {
       data: data[def.key],
     };
   });
+  // Started from a Google Business Profile link: the profile (and its reviews) comes first, the website second.
+  if (input.audit?.context.primary === "GBP") {
+    const lead = sections.filter((s) => s.key === "gbp" || s.key === "reputation");
+    const rest = sections.filter((s) => !lead.includes(s));
+    const at = rest.findIndex((s) => s.key === "executive_summary") + 1;
+    return [...rest.slice(0, at), ...lead, ...rest.slice(at)];
+  }
+  return sections;
 }
 
 /** Intro for the keyword section when it has a table of target keywords. */

@@ -450,7 +450,7 @@ export async function defaultGbpQueries(workspaceId: string, prospectId: string)
   return [...new Set(services.slice(0, 2).map((s) => [s.toLowerCase(), city].filter(Boolean).join(" ")))];
 }
 
-async function saveGbp(workspaceId: string, userId: string, prospectId: string, g: GbpData) {
+export async function saveGbp(workspaceId: string, userId: string, prospectId: string, g: GbpData) {
   const row = await db.gbpProfile.create({
     data: {
       workspaceId,
