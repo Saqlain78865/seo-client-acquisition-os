@@ -17,6 +17,13 @@ const Chip = ({ children, delay, className }: { children: React.ReactNode; delay
   </span>
 );
 
+/** Keeps each scene in the middle of the reel, whatever its height. */
+const Centered = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex flex-1 items-center">
+    <div className="w-full">{children}</div>
+  </div>
+);
+
 // ───────────────────────────── Bulk audit ─────────────────────────────
 
 const BULK_SCENES: ReelScene[] = [
@@ -94,7 +101,7 @@ function BulkScene({ k }: { k: string }) {
 }
 
 export function BulkReel({ className }: { className?: string }) {
-  return <Reel scenes={BULK_SCENES} label="Bulk audit — 12-second animation" summary="Paste many websites, they are audited three at a time, ranked by opportunity, and proposals go out together." className={className} render={(k) => <BulkScene k={k} />} />;
+  return <Reel scenes={BULK_SCENES} label="Bulk audit — 12-second animation" summary="Paste many websites, they are audited three at a time, ranked by opportunity, and proposals go out together." className={className} render={(k) => <Centered><BulkScene k={k} /></Centered>} />;
 }
 
 // ───────────────────────────── New audit ─────────────────────────────
@@ -183,7 +190,7 @@ function AuditScene({ k }: { k: string }) {
 }
 
 export function NewAuditReel({ className }: { className?: string }) {
-  return <Reel scenes={AUDIT_SCENES} label="New audit — 12-second animation" summary="Paste any page or a Google Maps link; the whole site is checked and the proposal shows a before-and-after of the homepage." className={className} render={(k) => <AuditScene k={k} />} />;
+  return <Reel scenes={AUDIT_SCENES} label="New audit — 12-second animation" summary="Paste any page or a Google Maps link; the whole site is checked and the proposal shows a before-and-after of the homepage." className={className} render={(k) => <Centered><AuditScene k={k} /></Centered>} />;
 }
 
 // ───────────────────────────── Prospects ─────────────────────────────
@@ -278,5 +285,5 @@ function ProspectScene({ k }: { k: string }) {
 }
 
 export function ProspectsReel({ className }: { className?: string }) {
-  return <Reel scenes={PROSPECT_SCENES} label="Prospects — 12-second animation" summary="All leads in one place, who to contact today, follow-ups by Gmail or WhatsApp, and monthly reports for won clients." className={className} render={(k) => <ProspectScene k={k} />} />;
+  return <Reel scenes={PROSPECT_SCENES} label="Prospects — 12-second animation" summary="All leads in one place, who to contact today, follow-ups by Gmail or WhatsApp, and monthly reports for won clients." className={className} render={(k) => <Centered><ProspectScene k={k} /></Centered>} />;
 }

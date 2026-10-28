@@ -117,7 +117,7 @@ export function Reel({ scenes, render, label, summary, className }: { scenes: re
         </div>
       </header>
 
-      <div key={`s-${loop}-${scene}`} aria-hidden className="relative flex-1 px-5 py-3">
+      <div key={`s-${loop}-${scene}`} aria-hidden className="relative flex flex-1 flex-col px-5 py-3">
         {render(current.key)}
       </div>
 
