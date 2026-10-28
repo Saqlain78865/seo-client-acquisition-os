@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, CircleAlert, FileText, Loader2, Mail, Send } from "lucide-react";
-import { Badge, Button, Card, CardHeader } from "@/components/ui";
+import { CalendarClock, CheckCircle2, CircleAlert, FileText, Loader2, Mail, Send } from "lucide-react";
+import { Badge, Button, Card, CardHeader, Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import type { BatchSendRow } from "@/lib/messaging/bulk-send";
 import { createBatchProposalsAction, sendBatchAction } from "./actions";
 import { WhatsAppButton } from "@/components/whatsapp-button";
+import { startCampaignAction } from "../../../campaigns/actions";
 
 /** "Create proposals for all" for batches that were run without automatic proposals. */
 export function CreateAllProposals({ batchId, count }: { batchId: string; count: number }) {
@@ -44,6 +45,20 @@ export function SendAll({ batchId, rows, senderReady }: { batchId: string; rows:
   const [pending, start] = useTransition();
   const router = useRouter();
   const sentCount = rows.filter((r) => r.sent).length;
+  const [dailyLimit, setDailyLimit] = useState(20);
+  const startAuto = () => {
+    const ids = [...chosen];
+    const days = Math.ceil(ids.length / Math.max(dailyLimit, 1));
+    if (!confirm(`Start auto-send for ${ids.length} proposal${ids.length === 1 ? "" : "s"}?
+
+Up to ${dailyLimit} emails a day between 9:00 and 18:00 while LeadLift is open — about ${days} day${days === 1 ? "" : "s"}. Clients who reply, accept, decline or opt out are skipped. You can pause or stop it on the Auto-send page.`)) return;
+    start(async () => {
+      const r = await startCampaignAction(batchId, ids, dailyLimit);
+      if (!r.ok) return void toast.error(r.error);
+      toast.success(r.message ?? "Auto-send started");
+      router.push("/campaigns");
+    });
+  };
   const toggle = (id: string) =>
     setChosen((s) => {
       const n = new Set(s);
@@ -124,8 +139,21 @@ export function SendAll({ batchId, rows, senderReady }: { batchId: string; rows:
                 <span>I checked these addresses and may contact these businesses.</span>
               </label>
               <Button className="ml-auto" disabled={pending || !confirmed || chosen.size === 0} onClick={send}>
-                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending ? "Sending…" : `Send ${chosen.size} proposal${chosen.size === 1 ? "" : "s"}`}
+                {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {pending ? "Sending…" : `Send ${chosen.size} now`}
               </Button>
+              <div className="flex w-full flex-wrap items-center gap-3 rounded-xl border border-primary/20 bg-primary-soft/40 p-3 text-sm">
+                <CalendarClock className="h-4 w-4 text-primary" />
+                <span className="font-medium">Or send automatically</span>
+                <label className="flex items-center gap-2 text-muted">
+                  up to
+                  <Input type="number" min={1} max={50} value={dailyLimit} onChange={(e) => setDailyLimit(Math.min(50, Math.max(1, Number(e.target.value) || 1)))} className="h-8 w-20 text-sm" aria-label="Emails per day" />
+                  a day
+                </label>
+                <Button variant="secondary" className="ml-auto" disabled={pending || !confirmed || chosen.size === 0} onClick={startAuto}>
+                  Start auto-send
+                </Button>
+                <span className="w-full text-xs text-muted">Spread over working hours (9:00–18:00) while LeadLift is open. Stops by itself for clients who reply, accept, decline or opt out.</span>
+              </div>
             </div>
           )}
       </>

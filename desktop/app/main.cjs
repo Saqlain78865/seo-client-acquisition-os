@@ -1,4 +1,4 @@
-// Desktop shell for SEO Client Acquisition OS: starts the bundled server on this PC and shows it in a window.
+// Desktop shell for LeadLift: starts the bundled server on this PC and shows it in a window.
 const { app, BrowserWindow, Menu, dialog, session, shell } = require("electron");
 const { spawn, spawnSync } = require("node:child_process");
 const crypto = require("node:crypto");
@@ -7,7 +7,7 @@ const http = require("node:http");
 const net = require("node:net");
 const path = require("node:path");
 
-const APP_NAME = "SEO Acquisition OS";
+const APP_NAME = "LeadLift";
 const PREFERRED_PORT = 47831;
 
 // Packaged: resources next to the app. Development (`npm start` in desktop/): the prepared build folder.
@@ -16,8 +16,9 @@ const SERVER_DIR = path.join(RES, "server");
 const NODE_EXE = path.join(RES, "node", "node.exe");
 const MIGRATIONS_DIR = path.join(RES, "migrations");
 
+// Data stays in the folder used before the LeadLift rename, so updating keeps everything.
 // SEO_OS_DATA_DIR points the app at another data folder (used for testing a build without touching real data).
-if (process.env.SEO_OS_DATA_DIR) app.setPath("userData", path.resolve(process.env.SEO_OS_DATA_DIR));
+app.setPath("userData", process.env.SEO_OS_DATA_DIR ? path.resolve(process.env.SEO_OS_DATA_DIR) : path.join(app.getPath("appData"), "SEO Acquisition OS"));
 const DATA_DIR = app.getPath("userData");
 const DB_PATH = path.join(DATA_DIR, "data.db");
 const STORAGE_DIR = path.join(DATA_DIR, "storage");

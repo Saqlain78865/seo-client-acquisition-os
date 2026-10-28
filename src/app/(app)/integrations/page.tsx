@@ -104,7 +104,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                 <a className="text-primary underline" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">
                   App passwords
                 </a>
-                , name it “SEO OS”, and copy the 16-letter password.
+                , name it “LeadLift”, and copy the 16-letter password.
               </li>
               <li>For drafts: Gmail → Settings → Forwarding and POP/IMAP → enable IMAP.</li>
               <li>Paste your Gmail address and the App Password below.</li>

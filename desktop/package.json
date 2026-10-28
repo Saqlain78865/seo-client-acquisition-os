@@ -2,7 +2,7 @@
   "name": "seo-acquisition-os-desktop",
   "private": true,
   "version": "0.1.0",
-  "description": "Windows desktop app for SEO Client Acquisition OS",
+  "description": "Windows desktop app for LeadLift",
   "scripts": {
     "prepare-app": "node build.mjs",
     "start": "electron app",

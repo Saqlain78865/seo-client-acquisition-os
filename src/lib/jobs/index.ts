@@ -8,7 +8,8 @@ export { JOB_TYPES } from "./handlers";
 
 const MAINTENANCE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DIGEST_CHECK_MS = 60 * 60 * 1000;
-const state = globalThis as unknown as { __maintenanceTimer?: NodeJS.Timeout; __digestTimer?: NodeJS.Timeout };
+const CAMPAIGN_TICK_MS = 5 * 60 * 1000;
+const state = globalThis as unknown as { __maintenanceTimer?: NodeJS.Timeout; __digestTimer?: NodeJS.Timeout; __campaignTimer?: NodeJS.Timeout };
 
 /**
  * Starts the in-process job worker if it is not running yet. Called from the authenticated app
@@ -35,5 +36,15 @@ export function ensureWorker() {
     state.__digestTimer = setInterval(digest, DIGEST_CHECK_MS);
     state.__digestTimer.unref?.();
     setTimeout(digest, 90_000).unref?.();
+  }
+  // Auto-send campaigns: one email per campaign at most every tick, in working hours, under the daily limit.
+  if (!state.__campaignTimer && process.env.DISABLE_CAMPAIGNS !== "true") {
+    const tick = () =>
+      import("../campaigns")
+        .then((m) => m.runCampaigns())
+        .catch((e) => logger("campaigns").error("auto-send tick failed", { err: e }));
+    state.__campaignTimer = setInterval(tick, CAMPAIGN_TICK_MS);
+    state.__campaignTimer.unref?.();
+    setTimeout(tick, 120_000).unref?.();
   }
 }

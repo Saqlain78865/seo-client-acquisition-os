@@ -88,37 +88,43 @@ export async function createBatchProposals(workspaceId: string, userId: string, 
  * The person confirmed the list (including unverified addresses found on the websites) before
  * this runs. A proposal is never sent twice: the key is fixed per proposal version.
  */
+/**
+ * Emails one proposal to its client with the default template and the PDF. Used by the bulk send
+ * and by auto-send campaigns; the fixed key means a proposal version is never emailed twice.
+ */
+export async function sendOneProposal(workspaceId: string, userId: string, proposalId: string): Promise<{ proposalId: string; ok: boolean; message: string; to?: string }> {
+  const d = await draftFor(workspaceId, proposalId);
+  if (!d || d.problem || !d.contact) return { proposalId, ok: false, message: d?.problem ?? "Proposal not found" };
+  try {
+    const r = await sendProposalEmail(workspaceId, userId, {
+      proposalId,
+      version: d.ctx.version.version,
+      to: d.contact.value,
+      cc: [],
+      bcc: [],
+      subject: d.subject,
+      body: d.body,
+      templateId: d.template.id,
+      idempotencyKey: `bulk:${proposalId}:v${d.ctx.version.version}`,
+      scheduleFollowUps: true,
+      confirmUnverified: true,
+    });
+    return { proposalId, ok: true, message: r.duplicate ? "Already sent" : `Sent to ${d.contact.value}`, to: d.contact.value };
+  } catch (e) {
+    return { proposalId, ok: false, message: e instanceof SendError ? e.message : "Sending failed" };
+  }
+}
+
 export async function sendBatchProposals(workspaceId: string, userId: string, batchId: string, proposalIds: string[]) {
   if (!(await resolveSender(workspaceId))) throw new SendError("Connect Gmail on the Integrations page first.");
   const allowed = new Set((await db.proposal.findMany({ where: { workspaceId, audit: { batchId }, id: { in: proposalIds } }, select: { id: true } })).map((p) => p.id));
   const results: { proposalId: string; ok: boolean; message: string }[] = [];
   for (const proposalId of proposalIds) {
     if (!allowed.has(proposalId)) continue;
-    const d = await draftFor(workspaceId, proposalId);
-    if (!d || d.problem || !d.contact) {
-      results.push({ proposalId, ok: false, message: d?.problem ?? "Proposal not found" });
-      continue;
-    }
-    try {
-      const r = await sendProposalEmail(workspaceId, userId, {
-        proposalId,
-        version: d.ctx.version.version,
-        to: d.contact.value,
-        cc: [],
-        bcc: [],
-        subject: d.subject,
-        body: d.body,
-        templateId: d.template.id,
-        idempotencyKey: `bulk:${proposalId}:v${d.ctx.version.version}`,
-        scheduleFollowUps: true,
-        confirmUnverified: true,
-      });
-      results.push({ proposalId, ok: true, message: r.duplicate ? "Already sent" : `Sent to ${d.contact.value}` });
-    } catch (e) {
-      results.push({ proposalId, ok: false, message: e instanceof SendError ? e.message : "Sending failed" });
-    }
+    const r = await sendOneProposal(workspaceId, userId, proposalId);
+    results.push({ proposalId: r.proposalId, ok: r.ok, message: r.message });
     // A short pause keeps Gmail from treating the run as a burst.
-    await pause(1200);
+    if (r.to) await pause(1200);
   }
   return results;
 }

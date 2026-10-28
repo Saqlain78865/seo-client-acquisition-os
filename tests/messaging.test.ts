@@ -12,6 +12,7 @@ import { clickToChatUrl, mapGraphError, parseStatusWebhook, toWaNumber, verifyWe
 import { createShareLink, recordShareView, resolveShareToken, respondToProposal, revokeShareLink } from "@/lib/messaging/share";
 import { listNotifications, markNotificationsRead } from "@/lib/notifications";
 import { batchSendPreview, sendBatchProposals } from "@/lib/messaging/bulk-send";
+import { createCampaign, runCampaigns, setCampaignStatus } from "@/lib/campaigns";
 import { applyWhatsAppStatuses, confirmClickToChatSent, loadComposeContext, openClickToChat, sendProposalEmail, sendWhatsAppCloud, SendError, whatsAppDraft, type EmailSendInput } from "@/lib/messaging/service";
 
 describe("templates", () => {
@@ -213,6 +214,42 @@ describe("sending (database + local SMTP server)", () => {
     expect(d.message).toMatch(/PDF here/);
     expect(d.pdfUrl).toBe(`/api/proposals/${proposal.id}/pdf?v=1&download=1`);
   });
+
+  it("auto-send: approved once, then emails within working hours, spaced, under the daily limit, and skips opted-out clients", async () => {
+    await saveCredentials(workspaceId, "SMTP", { secret: { user: "me@nova.example", pass: "right-password" } });
+    const batch = await db.auditBatch.create({ data: { workspaceId, name: "Campaign test", createdById: userId } });
+    const props = [];
+    for (const email of ["c1@client.example", "c2@client.example", "c3@client.example"]) {
+      const x = await newProposal(email, false);
+      const audit = await db.websiteAudit.create({ data: { workspaceId, prospectId: x.prospect.id, inputUrl: "https://x.example", normalizedUrl: "https://x.example/", status: "COMPLETED", batchId: batch.id } });
+      await db.proposal.update({ where: { id: x.proposal.id }, data: { auditId: audit.id } });
+      props.push(x);
+    }
+    await expect(createCampaign(workspaceId, userId, { batchId: batch.id, proposalIds: props.map((p) => p.proposal.id), dailyLimit: 99 })).rejects.toThrow(/between 1 and 50/);
+    const campaign = await createCampaign(workspaceId, userId, { batchId: batch.id, proposalIds: props.map((p) => p.proposal.id), dailyLimit: 1 });
+    expect(campaign._count.recipients).toBe(3);
+    // The same proposals cannot be queued twice.
+    await expect(createCampaign(workspaceId, userId, { batchId: batch.id, proposalIds: props.map((p) => p.proposal.id), dailyLimit: 5 })).rejects.toThrow(/already in an auto-send/);
+
+    const day1 = new Date(2030, 0, 7, 10, 0);
+    const before = received.length;
+    expect((await runCampaigns(new Date(2030, 0, 7, 7, 0))).sent).toBe(0); // before working hours
+    expect((await runCampaigns(day1)).sent).toBe(1);
+    expect((await runCampaigns(new Date(2030, 0, 7, 16, 0))).sent).toBe(0); // daily limit reached
+    expect(received.length).toBe(before + 1);
+
+    // Day 2: the second client opted out in the meantime, so the third one gets it.
+    await db.prospect.update({ where: { id: props[1].prospect.id }, data: { doNotContact: true } });
+    expect((await runCampaigns(new Date(2030, 0, 8, 11, 0))).sent).toBe(1);
+    const rows = await db.campaignRecipient.findMany({ where: { campaignId: campaign.id }, orderBy: { sortOrder: "asc" } });
+    expect(rows.map((r) => r.status)).toEqual(["SENT", "SKIPPED", "SENT"]);
+    expect(rows[1].reason).toBe("Client opted out");
+
+    // Nothing left: the campaign finishes on the next tick.
+    await runCampaigns(new Date(2030, 0, 9, 11, 0));
+    expect((await db.campaign.findUniqueOrThrow({ where: { id: campaign.id } })).status).toBe("DONE");
+    await expect(setCampaignStatus(workspaceId, campaign.id, "ACTIVE")).rejects.toThrow(/ended/);
+  }, 120_000);
 
   it("share links lock the version, expire and can be revoked", async () => {
     const { proposal } = await newProposal("share@client.example");

@@ -13,7 +13,9 @@ export class AuditRequestError extends Error {}
 
 /** Validates the URL, links or creates the prospect, records the audit and queues it. */
 export async function startAudit(workspaceId: string, userId: string, req: AuditRequest, opts: { batchId?: string; quick?: boolean } = {}) {
-  const normalizedUrl = normalizeWebsiteUrl(req.websiteUrl);
+  // Any page link (a product page, a blog post…) audits the whole website: the audit and the
+  // prospect use the site's home address; the pasted link is kept as the audit's input.
+  const normalizedUrl = `${new URL(normalizeWebsiteUrl(req.websiteUrl)).origin}/`;
   let host: string;
   try {
     host = assertUrlShape(normalizedUrl, { allowPrivateNetworks: runnerOptions.allowPrivateNetworks }).hostname;

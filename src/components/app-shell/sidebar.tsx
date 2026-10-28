@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Menu, SearchCheck, Sparkles, X } from "lucide-react";
+import { ArrowRight, Menu, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS, activeNavHref } from "./nav";
+import { Logo } from "@/components/brand/logo";
 
 function NavList({ onNavigate, isAdmin }: { onNavigate?: () => void; isAdmin: boolean }) {
   const pathname = usePathname();
@@ -48,14 +49,8 @@ function NavList({ onNavigate, isAdmin }: { onNavigate?: () => void; isAdmin: bo
 
 function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 px-6 text-sm font-semibold text-white">
-      <span className="rounded-xl bg-gradient-to-br from-primary to-accent p-2 shadow-lg shadow-primary/30">
-        <SearchCheck className="h-4 w-4" aria-hidden />
-      </span>
-      <span className="leading-tight">
-        SEO Acquisition OS
-        <span className="block text-[11px] font-normal text-white/45">Audit · Propose · Win</span>
-      </span>
+    <Link href="/" className="flex items-center px-5" aria-label="LeadLift — home">
+      <Logo tagline inverted />
     </Link>
   );
 }

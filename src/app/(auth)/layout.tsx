@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { SearchCheck } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
 import { getSession } from "@/lib/auth";
 import { Constellation, Marquee, OrbitCore, Typewriter } from "@/components/motion";
 
@@ -13,11 +13,8 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
         <Constellation />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgb(255_255_255/0.025)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/0.025)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
 
-        <div className="relative flex items-center gap-2.5 px-10 pt-9 text-sm font-semibold">
-          <span className="rounded-xl bg-gradient-to-br from-primary to-accent p-2 shadow-lg shadow-primary/40">
-            <SearchCheck className="h-4 w-4" />
-          </span>
-          SEO Client Acquisition OS
+        <div className="relative px-10 pt-9">
+          <Logo tagline inverted />
         </div>
 
         <div className="relative grid flex-1 items-center gap-6 px-10 xl:grid-cols-[1fr_0.95fr]">

@@ -110,6 +110,9 @@ describe("full audit through the job queue", () => {
     const { audit, createdProspect, prospect } = await startAudit(workspaceId, userId, { websiteUrl: `${site.base}/about`, currency: "USD" });
     expect(createdProspect).toBe(false);
     expect(prospect.id).toBe(prospectId);
+    // A page link audits the whole website; the pasted link is kept as the input.
+    expect(audit.normalizedUrl).toBe(`${site.base}/`);
+    expect(audit.inputUrl).toBe(`${site.base}/about`);
     await waitForAudit(audit.id);
     expect(await db.websiteAudit.count({ where: { prospectId } })).toBe(2);
   }, 90_000);

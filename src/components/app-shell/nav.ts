@@ -1,6 +1,7 @@
 import {
   BarChart3,
   BellRing,
+  CalendarClock,
   Briefcase,
   FileSearch,
   FileText,
@@ -27,6 +28,7 @@ export const NAV_GROUPS = [
       { href: "/audits", label: "Audit Reports", icon: FileSearch },
       { href: "/proposals", label: "SEO Proposals", icon: FileText },
       { href: "/follow-ups", label: "Follow-ups", icon: BellRing },
+      { href: "/campaigns", label: "Auto-send", icon: CalendarClock },
       { href: "/deals", label: "Clients and Deals", icon: Briefcase },
       { href: "/work", label: "Client Work", icon: KanbanSquare },
     ],

@@ -21,7 +21,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: { default: "SEO Client Acquisition OS", template: "%s · SEO Client Acquisition OS" },
+  title: { default: "LeadLift", template: "%s · LeadLift" },
   description: "Audit websites, generate evidence-based SEO proposals and manage client acquisition.",
 };
 

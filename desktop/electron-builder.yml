@@ -1,5 +1,5 @@
 appId: com.seoacquisitionos.desktop
-productName: SEO Acquisition OS
+productName: LeadLift
 copyright: Copyright © 2026 Saqlain Nazir
 directories:
   app: app
@@ -20,14 +20,14 @@ extraResources:
 win:
   target: nsis
   icon: assets/icon.png
-  executableName: SEO Acquisition OS
+  executableName: LeadLift
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: SEO Acquisition OS
+  shortcutName: LeadLift
   # Keep the user's data (database, PDFs, settings) when the app is uninstalled or updated.
   deleteAppDataOnUninstall: false
-artifactName: SEO-Acquisition-OS-Setup-${version}.${ext}
+artifactName: LeadLift-Setup-${version}.${ext}

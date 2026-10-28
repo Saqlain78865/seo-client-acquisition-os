@@ -95,6 +95,7 @@ model Workspace {
   gbpProfiles      GbpProfile[]
   kickoffTasks     KickoffTask[]
   clientTasks      ClientTask[]
+  campaigns        Campaign[]
 }
 
 model WorkspaceMembership {
@@ -614,6 +615,7 @@ model Proposal {
   deals              Deal[]
   responses          ProposalResponse[]
   readSessions       ProposalReadSession[]
+  campaignRecipients CampaignRecipient[]
 }
 
 model ProposalVersion {
@@ -931,6 +933,7 @@ model AuditBatch {
 
   workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   audits    WebsiteAudit[]
+  campaigns Campaign[]
 
   @@index([workspaceId, createdAt])
 }
@@ -1048,4 +1051,45 @@ model ClientTask {
 
   @@index([workspaceId, month])
   @@index([prospectId, month])
+}
+
+/// Auto-send: a list of proposals the user approved once, emailed automatically up to a daily limit.
+model Campaign {
+  id          String    @id @default(cuid())
+  workspaceId String
+  batchId     String?
+  name        String
+  // ACTIVE | PAUSED | DONE | STOPPED
+  status      String    @default("ACTIVE")
+  dailyLimit  Int       @default(20)
+  createdById String?
+  approvedAt  DateTime  @default(now())
+  lastSentAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  batch      AuditBatch?         @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  recipients CampaignRecipient[]
+
+  @@index([workspaceId, status])
+}
+
+model CampaignRecipient {
+  id         String    @id @default(cuid())
+  campaignId String
+  proposalId String
+  email      String
+  // QUEUED | SENT | SKIPPED | FAILED
+  status     String    @default("QUEUED")
+  reason     String?
+  sortOrder  Int       @default(0)
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, proposalId])
+  @@index([campaignId, status, sortOrder])
 }

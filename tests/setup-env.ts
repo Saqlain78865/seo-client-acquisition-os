@@ -5,3 +5,4 @@ process.env.ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 // Tests never touch the real ./storage folder (the retention sweep deletes files there).
 process.env.STORAGE_DIR = path.resolve(__dirname, "../test-storage");
 process.env.DISABLE_MAINTENANCE = "true";
+process.env.DISABLE_CAMPAIGNS = "true";
