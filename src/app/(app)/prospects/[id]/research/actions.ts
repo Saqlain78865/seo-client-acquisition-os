@@ -8,7 +8,7 @@ import { reportError, withReference } from "@/lib/log";
 import { ResearchError, fetchGbpProfile, saveManualGbp, chooseTopKeywords, setKeywordInProposal, addCompetitor, addManualKeywords, analyseKeywords, deleteImport, generateAiKeywordIdeas, generateSeedKeywords, observeCompetitor, runDomainCheck, runPerformanceTest } from "@/lib/research/service";
 import type { Strategy } from "@/lib/research/pagespeed";
 import { draftGbpContent, type GbpDrafts } from "@/lib/research/gbp-drafts";
-import { ReputationError, addReviewScreenshot, checkReviews, createReputationProposal, deleteReviewScreenshot } from "@/lib/reputation";
+import { ReputationError, addPastedReviews, addReviewScreenshot, checkReviews, createReputationProposal, deleteReviewScreenshot } from "@/lib/reputation";
 
 export type ResearchResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -51,8 +51,16 @@ export async function uploadReviewShotAction(prospectId: string, formData: FormD
   return reputation(prospectId, async (ws) => {
     const file = formData.get("file");
     if (!(file instanceof File) || !file.size) throw new ReputationError("Choose a screenshot.");
-    await addReviewScreenshot(ws, prospectId, { type: file.type, bytes: Buffer.from(await file.arrayBuffer()) }, String(formData.get("caption") ?? ""));
-    return "Screenshot added";
+    const r = await addReviewScreenshot(ws, prospectId, { type: file.type, bytes: Buffer.from(await file.arrayBuffer()) }, String(formData.get("caption") ?? ""));
+    return r.read == null ? "Screenshot added" : r.read ? `Screenshot added — AI read ${r.read} new review${r.read === 1 ? "" : "s"}` : "Screenshot added — no new reviews found in it";
+  });
+}
+
+/** Reviews pasted as text into the reputation card. */
+export async function pasteReviewsAction(prospectId: string, text: string) {
+  return reputation(prospectId, async (ws) => {
+    const n = await addPastedReviews(ws, prospectId, text);
+    return n ? `${n} review${n === 1 ? "" : "s"} added` : "Those reviews are already in the list";
   });
 }
 

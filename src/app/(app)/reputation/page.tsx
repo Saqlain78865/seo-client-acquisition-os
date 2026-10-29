@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ChevronRight, ShieldCheck } from "lucide-react";
 import { requireSession } from "@/lib/auth";
 import { reputationList } from "@/lib/reputation";
+import { getApiKey } from "@/lib/integrations";
 import { formatDate } from "@/lib/utils";
 import { Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui";
 import { StartReputationForm } from "./start-form";
@@ -10,21 +11,21 @@ import { StartReputationForm } from "./start-form";
 export const metadata: Metadata = { title: "Reputation" };
 
 const STEPS = [
-  ["Add the business", "Its Google Maps link, or just its name and website."],
-  ["Collect the bad reviews", "Read from Google with a Places key, pasted, or as your screenshots."],
+  ["Paste the Google Maps link", "From the profile's Share button — nothing else to type."],
+  ["Add the bad reviews", "Read from Google (Places key), or screenshots that AI reads, or pasted."],
   ["Check them with AI", "Which may break Google policy (removal can be requested) and which need a reply."],
   ["Send the proposal", "A reputation-only proposal with the reviews, screenshots and your plan."],
 ];
 
 export default async function ReputationPage() {
   const session = await requireSession();
-  const list = await reputationList(session.workspace.id);
+  const [list, placesReady] = await Promise.all([reputationList(session.workspace.id), getApiKey(session.workspace.id, "PLACES").then(Boolean)]);
   return (
     <>
       <PageHeader title="Reputation" description="Turn a business's bad Google reviews into a reputation proposal it wants to accept." />
       <div className="grid gap-6 lg:grid-cols-[1fr_24rem]">
         <Card className="p-6">
-          <StartReputationForm />
+          <StartReputationForm placesReady={placesReady} />
         </Card>
         <Card>
           <CardHeader title="How it works" />

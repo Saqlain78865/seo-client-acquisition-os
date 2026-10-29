@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, ImagePlus, Loader2, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, CardHeader } from "@/components/ui";
-import { checkReviewsAction, createReputationProposalAction, deleteReviewShotAction, uploadReviewShotAction } from "./actions";
+import { checkReviewsAction, createReputationProposalAction, deleteReviewShotAction, pasteReviewsAction, uploadReviewShotAction } from "./actions";
 
 type Review = { rating: number; text: string; when: string | null; verdict: "POLICY" | "GENUINE" | null; policy: string | null; reason: string | null; reply: string | null };
 
@@ -15,6 +15,7 @@ type Review = { rating: number; text: string; when: string | null; verdict: "POL
  */
 export function ReputationCard({ prospectId, reviews, shots, aiReady }: { prospectId: string; reviews: Review[]; shots: { id: string; caption: string | null }[]; aiReady: boolean }) {
   const [pending, start] = useTransition();
+  const [pasted, setPasted] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const removable = reviews.filter((r) => r.verdict === "POLICY").length;
@@ -22,15 +23,14 @@ export function ReputationCard({ prospectId, reviews, shots, aiReady }: { prospe
   const upload = (files: FileList | null) =>
     start(async () => {
       if (!files?.length) return;
-      let added = 0;
+      toast.info(aiReady ? "Uploading — AI is reading the reviews in each screenshot…" : "Uploading…");
       for (const file of Array.from(files)) {
         const fd = new FormData();
         fd.set("file", file);
         const r = await uploadReviewShotAction(prospectId, fd);
-        if (r.ok) added++;
+        if (r.ok) toast.success(`${file.name}: ${r.message}`);
         else toast.error(`${file.name}: ${r.error}`);
       }
-      if (added) toast.success(`${added} screenshot${added === 1 ? "" : "s"} added`);
       if (fileRef.current) fileRef.current.value = "";
       router.refresh();
     });
@@ -81,8 +81,35 @@ export function ReputationCard({ prospectId, reviews, shots, aiReady }: { prospe
               {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />} Check with AI
             </Button>
           </div>
+          <details className="mb-3 rounded-xl border border-dashed border-border p-3 text-sm" open={reviews.length === 0}>
+            <summary className="cursor-pointer font-medium text-primary">Paste reviews</summary>
+            <p className="mt-1 text-xs text-muted">One review per paragraph, starting with its stars — e.g. “1★ Booked online, nobody answered.” Or add screenshots: AI reads them.</p>
+            <textarea
+              value={pasted}
+              onChange={(e) => setPasted(e.target.value)}
+              rows={4}
+              className="mt-2 w-full rounded-lg border border-border bg-surface p-2 text-sm"
+              placeholder={"1★ Total scam, go to …\n\n2★ The pickup was late …"}
+            />
+            <Button
+              size="sm"
+              className="mt-2"
+              disabled={pending || !pasted.trim()}
+              onClick={() =>
+                start(async () => {
+                  const r = await pasteReviewsAction(prospectId, pasted);
+                  if (!r.ok) return void toast.error(r.error);
+                  toast.success(r.message);
+                  setPasted("");
+                  router.refresh();
+                })
+              }
+            >
+              Add reviews
+            </Button>
+          </details>
           {reviews.length === 0 ? (
-            <p className="text-sm text-muted">No negative reviews yet. Paste them in “Enter by hand” above (one review per paragraph, starting with its stars, e.g. “1★ …”), or upload screenshots.</p>
+            <p className="text-sm text-muted">No negative reviews yet — paste them above or add screenshots.</p>
           ) : (
             <ul className="space-y-2">
               {reviews.map((r, i) => (
@@ -119,7 +146,7 @@ export function ReputationCard({ prospectId, reviews, shots, aiReady }: { prospe
             <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => upload(e.target.files)} />
           </div>
           {shots.length === 0 ? (
-            <p className="text-sm text-muted">Screenshot the bad reviews on Google Maps (phone or PC) and add them here — they appear in the proposal under “As your customers see it on Google”.</p>
+            <p className="text-sm text-muted">Screenshot the bad reviews on Google Maps (phone or PC) and add them here. AI reads each one into the review list, and the screenshots appear in the proposal under “As your customers see it on Google”.</p>
           ) : (
             <div className="grid grid-cols-2 gap-2">
               {shots.map((s) => (

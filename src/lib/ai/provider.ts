@@ -8,8 +8,11 @@ import { z } from "zod";
 export interface AiProvider {
   readonly name: string;
   readonly model: string;
-  generateJson<T>(args: { system: string; prompt: string; schema: z.ZodType<T>; maxOutputTokens?: number }): Promise<T>;
+  generateJson<T>(args: { system: string; prompt: string; schema: z.ZodType<T>; maxOutputTokens?: number; images?: AiImage[] }): Promise<T>;
 }
+
+/** An image sent with the prompt (e.g. a screenshot), base64-encoded. */
+export type AiImage = { mimeType: string; data: string };
 
 export class AiError extends Error {
   constructor(
@@ -67,7 +70,7 @@ class GeminiProvider implements AiProvider {
     }
   }
 
-  async generateJson<T>({ system, prompt, schema, maxOutputTokens = 4096 }: { system: string; prompt: string; schema: z.ZodType<T>; maxOutputTokens?: number }) {
+  async generateJson<T>({ system, prompt, schema, maxOutputTokens = 4096, images = [] }: { system: string; prompt: string; schema: z.ZodType<T>; maxOutputTokens?: number; images?: AiImage[] }) {
     const jsonSchema = z.toJSONSchema(schema);
     let lastError = "";
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -78,7 +81,7 @@ class GeminiProvider implements AiProvider {
 Return only JSON matching this JSON Schema:
 ${JSON.stringify(jsonSchema)}${lastError ? `
 
-Your previous answer was invalid: ${lastError}` : ""}` }] }],
+Your previous answer was invalid: ${lastError}` : ""}` }, ...images.map((i) => ({ inlineData: { mimeType: i.mimeType, data: i.data } }))] }],
         generationConfig: { responseMimeType: "application/json", temperature: 0.2, maxOutputTokens },
       });
       const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };

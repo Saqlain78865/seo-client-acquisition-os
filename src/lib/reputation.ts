@@ -93,44 +93,98 @@ export function proposalReviews(reviews: GbpData["reviews"], checks: Map<string,
  * Google Maps link, reads the profile and its reviews. Without them the user pastes reviews or adds
  * screenshots on the next page.
  */
-export async function startReputationCase(workspaceId: string, userId: string, input: { businessName: string; websiteUrl: string; gbpLink?: string }) {
+export async function startReputationCase(workspaceId: string, userId: string, input: { link: string }) {
+  const { isGbpLink, resolveGbpLink } = await import("./research/gbp-link");
+  const { fetchGbpByPlaceId, findPlaceFromLink } = await import("./research/gbp");
+  const { saveGbp } = await import("./research/service");
   const { normalizeDomain, normalizeWebsiteUrl } = await import("./url");
   const { createProspect } = await import("./prospects");
-  const name = input.businessName.trim();
-  if (name.length < 2) throw new ReputationError("Enter the business name.");
-  let websiteUrl: string;
+  const link = input.link.trim();
+  if (!isGbpLink(link)) throw new ReputationError("Paste the business's Google Maps link — on the profile press Share and copy the link (a review link works too).");
+  let where;
   try {
-    websiteUrl = normalizeWebsiteUrl(input.websiteUrl);
+    where = await resolveGbpLink(link);
   } catch {
-    throw new ReputationError("Enter the business's website address.");
+    throw new ReputationError("This link could not be opened. Copy it again from the profile's Share button.");
   }
-  const domain = normalizeDomain(websiteUrl);
-  if (!domain.includes(".")) throw new ReputationError("Enter the business's website address, e.g. example.com.");
-  const prospect =
-    (await db.prospect.findFirst({ where: { workspaceId, domain }, orderBy: { createdAt: "asc" } })) ??
-    (await createProspect(workspaceId, userId, { businessName: name, websiteUrl, leadSource: "Reputation (Google reviews)", currency: "USD" } as Parameters<typeof createProspect>[2]));
 
+  // With a Places key the profile, its rating and reviews are read from Google; without one the link still names the business.
+  let profile: GbpData | null = null;
   let note: string | null = null;
-  const link = input.gbpLink?.trim();
-  if (link) {
-    const key = await getApiKey(workspaceId, "PLACES");
-    if (!key) note = "Reading a Google Maps link needs the Places API key (Integrations). Paste the bad reviews or add screenshots below instead.";
-    else {
-      try {
-        const { resolveGbpLink } = await import("./research/gbp-link");
-        const { fetchGbpByPlaceId, findPlaceFromLink } = await import("./research/gbp");
-        const { saveGbp } = await import("./research/service");
-        const where = await resolveGbpLink(link);
-        const placeId = await findPlaceFromLink(key, { name: where.name ?? name, lat: where.lat, lng: where.lng });
-        if (!placeId) note = "That profile was not found on Google. Paste the bad reviews or add screenshots below.";
-        else await saveGbp(workspaceId, userId, prospect.id, { ...(await fetchGbpByPlaceId(key, placeId, name, [])), mapsUrl: where.url });
-      } catch (e) {
-        note = `The profile could not be read (${(e as Error).message.slice(0, 120)}). Paste the bad reviews or add screenshots below.`;
-      }
+  const key = await getApiKey(workspaceId, "PLACES");
+  if (key && where.name) {
+    try {
+      const placeId = await findPlaceFromLink(key, { name: where.name, lat: where.lat, lng: where.lng });
+      if (placeId) profile = await fetchGbpByPlaceId(key, placeId, where.name, []);
+      else note = "Google did not find this profile — add screenshots of the bad reviews instead.";
+    } catch (e) {
+      note = `The profile could not be read from Google (${(e as Error).message.slice(0, 120)}). Add screenshots of the bad reviews instead.`;
     }
+  } else if (!key) {
+    note = "Google's Places API is not switched on, so reviews are not read automatically. Add screenshots of the bad reviews (AI reads them) or paste them.";
   }
-  await logActivity({ workspaceId, prospectId: prospect.id, userId, type: "reputation.started", message: "Reputation case started (Google reviews)" });
+  const name = profile?.name ?? where.name;
+  if (!name) throw new ReputationError("The business name could not be read from this link. Open the profile on Google Maps, press Share and paste that link.");
+
+  // The prospect is keyed by its website, or by the profile when Google lists no website.
+  const website = profile?.website ? normalizeWebsiteUrl(profile.website) : null;
+  const domain = website ? normalizeDomain(website) : `maps/${slug(name)}`;
+  let prospect = await db.prospect.findFirst({ where: { workspaceId, domain }, orderBy: { createdAt: "asc" } });
+  if (!prospect) {
+    prospect = await createProspect(workspaceId, userId, { businessName: name, websiteUrl: website ?? where.url, leadSource: "Reputation (Google reviews)", currency: "USD" } as Parameters<typeof createProspect>[2]);
+    if (!website) prospect = await db.prospect.update({ where: { id: prospect.id }, data: { domain } });
+  }
+  if (profile) await saveGbp(workspaceId, userId, prospect.id, { ...profile, mapsUrl: profile.mapsUrl ?? where.url });
+  else if (!(await latestGbp(prospect.id))) {
+    await db.gbpProfile.create({ data: { workspaceId, prospectId: prospect.id, source: "MANUAL", name, mapsUrl: where.url, reviews: [], rankings: [] } });
+  }
+  await logActivity({ workspaceId, prospectId: prospect.id, userId, type: "reputation.started", message: "Reputation case started from a Google Maps link" });
   return { prospectId: prospect.id, note };
+}
+
+const slug = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60) || "business";
+
+// ───────────────────────────── Reviews from screenshots or pasted text ─────────────────────────────
+
+const readSchema = z.object({
+  reviews: z.array(z.object({ rating: z.number().int().min(1).max(5), text: z.string().max(1500), author: z.string().max(80).nullable(), when: z.string().max(60).nullable() })).max(20),
+});
+
+/** Gemini reads the Google reviews visible in a screenshot: stars, text, name and date. */
+export async function readReviewsFromImage(provider: AiProvider, image: { type: string; bytes: Buffer }): Promise<GbpData["reviews"]> {
+  const out = await provider.generateJson({
+    system: "You read screenshots of Google reviews. List every customer review visible in the image: rating = the number of filled stars (1-5), text = the review exactly as written (keep the original language), author and relative date if shown. Ignore the owner's replies, ads and anything that is not a review. If there are no reviews, return an empty list.",
+    prompt: "Read the Google reviews in this screenshot.",
+    schema: readSchema,
+    images: [{ mimeType: image.type, data: image.bytes.toString("base64") }],
+    maxOutputTokens: 4096,
+  });
+  return out.reviews.filter((r) => r.text.trim()).map((r) => ({ rating: r.rating, text: r.text.trim(), author: r.author?.trim() || null, when: r.when?.trim() || null }));
+}
+
+/** Adds reviews to the business's latest profile, skipping ones already there. Returns how many were new. */
+export async function mergeReviews(workspaceId: string, prospectId: string, reviews: GbpData["reviews"]) {
+  const row = await latestGbp(prospectId);
+  if (!row || row.workspaceId !== workspaceId) throw new ReputationError("Start from the business's Google Maps link first.");
+  const current = (row.reviews as GbpData["reviews"]) ?? [];
+  const seen = new Set(current.map((r) => reviewKey(r.text)));
+  const fresh = reviews.filter((r) => r.text.trim() && !seen.has(reviewKey(r.text)) && seen.add(reviewKey(r.text)));
+  if (fresh.length) await db.gbpProfile.update({ where: { id: row.id }, data: { reviews: [...current, ...fresh].slice(0, 60) } });
+  return fresh.length;
+}
+
+/** Reviews pasted as text: one per paragraph, starting with its stars ("1★ …"). */
+export async function addPastedReviews(workspaceId: string, prospectId: string, text: string) {
+  const { parsePastedReviews } = await import("./research/gbp");
+  const reviews = parsePastedReviews(text);
+  if (!reviews.length) throw new ReputationError("Paste at least one review.");
+  return mergeReviews(workspaceId, prospectId, reviews);
 }
 
 /** Businesses with a Google profile on record, with their negative-review numbers, for the Reputation page. */
@@ -163,7 +217,25 @@ const IMAGE_TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": 
 export const MAX_REVIEW_SHOT_BYTES = 6 * 1024 * 1024;
 export const MAX_REVIEW_SHOTS = 12;
 
-export async function addReviewScreenshot(workspaceId: string, prospectId: string, file: { type: string; bytes: Buffer }, caption?: string) {
+/**
+ * Saves the screenshot and, when Gemini is set up, reads the reviews in it into the review list.
+ * `read` is null when the reviews could not be read (no key, or Gemini busy) — the screenshot is kept either way.
+ */
+export async function addReviewScreenshot(workspaceId: string, prospectId: string, file: { type: string; bytes: Buffer }, caption?: string, providerOverride?: AiProvider) {
+  const shot = await saveReviewScreenshot(workspaceId, prospectId, file, caption);
+  let read: number | null = null;
+  const provider = providerOverride ?? getAiProvider(await getApiKey(workspaceId, "GEMINI"));
+  if (provider && (await latestGbp(prospectId))) {
+    try {
+      read = await mergeReviews(workspaceId, prospectId, await readReviewsFromImage(provider, file));
+    } catch {
+      read = null;
+    }
+  }
+  return { shot, read };
+}
+
+async function saveReviewScreenshot(workspaceId: string, prospectId: string, file: { type: string; bytes: Buffer }, caption?: string) {
   const prospect = await db.prospect.findFirst({ where: { id: prospectId, workspaceId }, select: { id: true } });
   if (!prospect) throw new ReputationError("Prospect not found.");
   const ext = IMAGE_TYPES[file.type];

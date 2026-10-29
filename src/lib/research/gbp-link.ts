@@ -1,9 +1,10 @@
 /**
  * Google Business Profile / Google Maps links pasted instead of a website:
- * maps.app.goo.gl/…, goo.gl/maps/…, google.com/maps/place/Name/@lat,lng, maps.google.com/?q=…, g.page/…
+ * maps.app.goo.gl/…, goo.gl/maps/…, google.com/maps/place/Name/@lat,lng, maps.google.com/?q=…, g.page/…,
+ * and the share links of a business panel in Google Search (share.google/…, g.co/kgs/…).
  * Only Google's own hosts are accepted, so following a short link cannot reach anything else.
  */
-const GBP_HOST = /^(?:www\.)?(?:maps\.app\.goo\.gl|goo\.gl|g\.page|maps\.google\.[a-z.]+|google\.[a-z.]+|business\.google\.com)$/i;
+const GBP_HOST = /^(?:www\.)?(?:maps\.app\.goo\.gl|goo\.gl|g\.page|maps\.google\.[a-z.]+|google\.[a-z.]+|business\.google\.com|share\.google|g\.co)$/i;
 
 export type GbpLink = { name: string | null; lat: number | null; lng: number | null; url: string };
 
@@ -13,6 +14,7 @@ export function isGbpLink(text: string): boolean {
     if (!GBP_HOST.test(u.hostname)) return false;
     if (/^(?:www\.)?google\./i.test(u.hostname)) return u.pathname.startsWith("/maps");
     if (/^(?:www\.)?goo\.gl$/i.test(u.hostname)) return u.pathname.startsWith("/maps");
+    if (/^g\.co$/i.test(u.hostname)) return u.pathname.startsWith("/kgs");
     return true;
   } catch {
     return false;

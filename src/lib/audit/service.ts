@@ -52,6 +52,9 @@ export async function startAuditFromGbpLink(workspaceId: string, userId: string,
 
 /** Validates the URL, links or creates the prospect, records the audit and queues it. */
 export async function startAudit(workspaceId: string, userId: string, req: AuditRequest, opts: { batchId?: string; quick?: boolean; primary?: "GBP"; reaudit?: boolean } = {}) {
+  // A Google Maps link is a profile, not a website: Google itself is never crawled.
+  const { isGbpLink } = await import("../research/gbp-link");
+  if (isGbpLink(req.websiteUrl)) throw new AuditRequestError("This is a Google Maps link, not a website. Add the business's website to audit it.");
   // Any page link (a product page, a blog post…) audits the whole website: the audit and the
   // prospect use the site's home address; the pasted link is kept as the audit's input.
   const normalizedUrl = `${new URL(normalizeWebsiteUrl(req.websiteUrl)).origin}/`;

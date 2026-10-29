@@ -5,10 +5,10 @@ import { requireSession } from "@/lib/auth";
 import { reportError, withReference } from "@/lib/log";
 import { ReputationError, startReputationCase } from "@/lib/reputation";
 
-export async function startReputationAction(input: { businessName: string; websiteUrl: string; gbpLink: string }): Promise<{ ok: true; prospectId: string; note: string | null } | { ok: false; error: string }> {
+export async function startReputationAction(link: string): Promise<{ ok: true; prospectId: string; note: string | null } | { ok: false; error: string }> {
   const session = await requireSession();
   try {
-    const r = await startReputationCase(session.workspace.id, session.user.id, input);
+    const r = await startReputationCase(session.workspace.id, session.user.id, { link });
     revalidatePath("/reputation");
     return { ok: true, ...r };
   } catch (e) {
