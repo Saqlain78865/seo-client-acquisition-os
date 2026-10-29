@@ -153,7 +153,7 @@ export default async function ProposalPage({ params, searchParams }: { params: P
                 <dd>{((version.services as string[] | null) ?? []).length}</dd>
               </div>
             </dl>
-            {isLatest && proposal.status !== "SENT" && (
+            {isLatest && (proposal.status === "DRAFT" || proposal.status === "READY") && (
               <div className="border-t border-border p-5">
                 <ReadyToggle proposalId={proposal.id} ready={proposal.status === "READY"} />
               </div>
@@ -181,6 +181,13 @@ export default async function ProposalPage({ params, searchParams }: { params: P
                       {r.contact ? ` · ${r.contact}` : ""} · v{r.version}
                     </p>
                     {r.message && <p className="rounded-lg bg-surface-2 px-3 py-2 whitespace-pre-wrap">{r.message}</p>}
+                    {r.signature && (
+                      <figure className="rounded-lg border border-border bg-white p-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={r.signature} alt={`Signature of ${r.name}`} className="h-14 w-auto" />
+                        <figcaption className="text-[11px] text-muted">Signed online · {formatDate(r.createdAt, true)}</figcaption>
+                      </figure>
+                    )}
                   </li>
                 ))}
               </ul>

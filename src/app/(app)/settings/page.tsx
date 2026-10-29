@@ -45,6 +45,7 @@ export default async function SettingsPage() {
                 consultantName: settings?.consultantName ?? "",
                 companyEmail: settings?.companyEmail ?? "",
                 companyPhone: settings?.companyPhone ?? "",
+                paymentInstructions: settings?.paymentInstructions ?? "",
                 companyWebsite: settings?.companyWebsite ?? "",
                 defaultCurrency: settings?.defaultCurrency ?? "USD",
                 proposalTheme: settings?.proposalTheme ?? "navy",

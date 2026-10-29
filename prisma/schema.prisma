@@ -130,6 +130,8 @@ model WorkspaceSettings {
   crawlDelayMs        Int     @default(800)
   dataRetentionDays   Int     @default(730)
   followUpDefaultDays String  @default("3,7") // comma-separated day offsets after sending
+  // Shown to the client right after they accept a proposal: a payment link or bank details.
+  paymentInstructions String?
   // Monday summary email to the owner: opens, acceptances, follow-ups due.
   weeklyDigest        Boolean   @default(true)
   lastDigestAt        DateTime?
@@ -176,6 +178,8 @@ model Prospect {
   doNotContact       Boolean   @default(false)
   doNotContactReason String?
   nextFollowUpAt     DateTime?
+  // The business's own "write a review" link (Google Business Profile → Ask for reviews), for its review kit.
+  reviewLink         String?
   lastActivityAt     DateTime  @default(now())
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -915,6 +919,8 @@ model ProposalResponse {
   name       String
   contact    String?
   message    String?
+  // Drawn signature on acceptance (PNG data URI).
+  signature  String?
   version    Int
   createdAt  DateTime @default(now())
 

@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { Mail } from "lucide-react";
 import { toast } from "sonner";
-import { Alert, Button, Field, Input, Select } from "@/components/ui";
+import { Alert, Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { CURRENCIES } from "@/lib/constants";
 import { ThemePicker } from "@/components/theme-picker";
 import { saveProfileAction, sendDigestNowAction, uploadLogoAction, type SettingsState } from "./actions";
@@ -22,6 +22,7 @@ type ProfileDefaults = {
   consultantName: string;
   companyEmail: string;
   companyPhone: string;
+  paymentInstructions: string;
   companyWebsite: string;
   defaultCurrency: string;
   proposalTheme: string;
@@ -55,6 +56,9 @@ export function ProfileForm({ defaults, disabled, logo }: { defaults: ProfileDef
         </Field>
         <Field label="Website" name="companyWebsite" error={e?.companyWebsite}>
           <Input defaultValue={defaults.companyWebsite} placeholder="https://" />
+        </Field>
+        <Field label="Payment instructions" name="paymentInstructions" error={e?.paymentInstructions} hint="Shown to the client right after they sign and accept a proposal: a payment link (https://…) or your bank details." className="sm:col-span-2">
+          <Textarea rows={3} defaultValue={defaults.paymentInstructions} placeholder="https://payoneer.com/… or Bank: Meezan Bank · IBAN PK… · Title: LeadLift Agency" />
         </Field>
         <Field label="Default proposal currency" name="defaultCurrency" error={e?.defaultCurrency}>
           <Select defaultValue={defaults.defaultCurrency}>

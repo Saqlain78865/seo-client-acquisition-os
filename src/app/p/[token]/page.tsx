@@ -31,6 +31,7 @@ export default async function SharedProposalPage({ params }: { params: Promise<{
   if (isClient) await recordShareView(proposal.id);
   const version = await db.proposalVersion.findUniqueOrThrow({ where: { proposalId_version: { proposalId: proposal.id, version: proposal.shareVersion! } }, select: { title: true, branding: true } });
   const branding = (version.branding ?? {}) as Partial<Branding>;
+  const settings = await db.workspaceSettings.findUnique({ where: { workspaceId: proposal.workspaceId }, select: { paymentInstructions: true } });
 
   return (
     <div className="theme-light min-h-screen bg-[#e9edf3]">
@@ -46,7 +47,7 @@ export default async function SharedProposalPage({ params }: { params: Promise<{
           <a href={`/p/${token}/pdf?download=1`} className={buttonClass("secondary", "sm")} aria-label="Download PDF">
             <Download className="h-4 w-4" /> <span className="hidden sm:inline">Download PDF</span>
           </a>
-          <RespondButtons token={token} accepted={!!proposal.acceptedAt} companyName={branding.companyName ?? null} />
+          <RespondButtons token={token} accepted={!!proposal.acceptedAt} companyName={branding.companyName ?? null} paymentInstructions={settings?.paymentInstructions ?? null} />
         </div>
       </header>
       <ProposalViewer token={token} track={isClient} />

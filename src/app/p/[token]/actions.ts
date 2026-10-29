@@ -11,6 +11,8 @@ const schema = z.object({
   name: z.string().trim().min(2, "Please enter your name").max(120),
   contact: z.string().trim().max(200).optional(),
   message: z.string().trim().max(3000).optional(),
+  signature: z.string().max(200_000).optional(),
+  agree: z.string().optional(),
 });
 
 /** Public: anyone with an active link may reply. Input is length-limited and rate-limited per proposal. */
@@ -18,6 +20,7 @@ export async function respondAction(token: string, _: RespondState, formData: Fo
   const parsed = schema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
   if (parsed.data.kind === "QUESTION" && !parsed.data.message) return { error: "Please write your question." };
+  if (parsed.data.kind === "ACCEPT" && parsed.data.agree !== "on") return { error: "Please tick the box to confirm you accept the proposal." };
   try {
     await respondToProposal(token, parsed.data);
     return { ok: true, kind: parsed.data.kind };

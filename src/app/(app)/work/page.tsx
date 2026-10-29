@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ClipboardList, FileText, KanbanSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardList, FileText, KanbanSquare, Star } from "lucide-react";
 import { requireSession } from "@/lib/auth";
 import { boardTasks, isMonthKey, monthKey, monthLabel, shiftMonth, wonClients } from "@/lib/client-work";
 import { EmptyState, PageHeader, buttonClass, tabBarClass, tabClass } from "@/components/ui";
@@ -27,9 +27,14 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
         description="Monthly work for won clients: plan it from the proposal, move it along, and turn it into a report."
         actions={
           clientId && (
-            <Link href={`/work-report?client=${clientId}&month=${month}`} className={buttonClass("secondary")}>
-              <FileText className="h-4 w-4" /> Monthly work report
-            </Link>
+            <>
+              <Link href={`/review-kit?client=${clientId}`} className={buttonClass("secondary")}>
+                <Star className="h-4 w-4" /> Review kit
+              </Link>
+              <Link href={`/work-report?client=${clientId}&month=${month}`} className={buttonClass("secondary")}>
+                <FileText className="h-4 w-4" /> Monthly work report
+              </Link>
+            </>
           )
         }
       />

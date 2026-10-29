@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CalendarClock, ExternalLink, FileSearch, FileText, Pencil, ScanSearch, Telescope } from "lucide-react";
+import { CalendarClock, ExternalLink, FileSearch, FileText, Pencil, ScanSearch, Star, Telescope } from "lucide-react";
 import { hasRole, requireSession } from "@/lib/auth";
 import { getProspect } from "@/lib/prospects";
 import { getPipelineStatuses } from "@/lib/workspace";
@@ -61,6 +61,11 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
             <Link href={`/prospects/${p.id}/research`} className={buttonClass("secondary")}>
               <Telescope className="h-4 w-4" /> Research
             </Link>
+            {p.status === "WON" && (
+              <Link href={`/review-kit?client=${p.id}`} className={buttonClass("secondary")}>
+                <Star className="h-4 w-4" /> Review kit
+              </Link>
+            )}
             <Link href={`/audits/new?prospectId=${p.id}`} className={buttonClass("primary")}>
               <ScanSearch className="h-4 w-4" /> Run audit
             </Link>

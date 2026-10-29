@@ -32,6 +32,7 @@ const profileSchema = z.object({
     .or(z.literal(""))
     .transform((v) => v || null),
   companyPhone: text(40),
+  paymentInstructions: text(1000),
   companyWebsite: z
     .string()
     .trim()

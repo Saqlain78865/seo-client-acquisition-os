@@ -95,12 +95,16 @@ export async function recordShareView(proposalId: string) {
 
 export class ResponseError extends Error {}
 
+/** A drawn signature: a PNG data URI of reasonable size. */
+const SIGNATURE = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
+export const MAX_SIGNATURE_CHARS = 200_000;
+
 /**
- * A reply from the client on the public link: accepting the proposal or asking a question.
- * Accepting marks the proposal ACCEPTED, records the deal as won, prepares the kickoff checklist
- * and cancels the pending proposal reminders.
+ * A reply from the client on the public link: accepting the proposal (with a drawn signature) or
+ * asking a question. Accepting marks the proposal ACCEPTED, records the deal as won, prepares the
+ * kickoff checklist and cancels the pending proposal reminders.
  */
-export async function respondToProposal(token: string, input: { kind: "ACCEPT" | "QUESTION"; name: string; contact?: string; message?: string }) {
+export async function respondToProposal(token: string, input: { kind: "ACCEPT" | "QUESTION"; name: string; contact?: string; message?: string; signature?: string }) {
   const proposal = await resolveShareToken(token);
   if (!proposal) throw new ResponseError("This link is no longer active. Please contact the sender.");
   const name = input.name.trim().slice(0, 120);
@@ -108,9 +112,11 @@ export async function respondToProposal(token: string, input: { kind: "ACCEPT" |
   const recent = await db.proposalResponse.count({ where: { proposalId: proposal.id, createdAt: { gt: new Date(Date.now() - 3600_000) } } });
   if (recent >= 5) throw new ResponseError("Thanks — we already received your messages. We will be in touch soon.");
   if (input.kind === "ACCEPT" && proposal.acceptedAt) return { alreadyAccepted: true };
+  const signature = input.kind === "ACCEPT" ? input.signature?.trim() : undefined;
+  if (input.kind === "ACCEPT" && (!signature || signature.length > MAX_SIGNATURE_CHARS || !SIGNATURE.test(signature))) throw new ResponseError("Please sign in the box to accept.");
 
   await db.proposalResponse.create({
-    data: { proposalId: proposal.id, kind: input.kind, name, contact: input.contact?.trim().slice(0, 200) || null, message: input.message?.trim().slice(0, 3000) || null, version: proposal.shareVersion! },
+    data: { proposalId: proposal.id, kind: input.kind, name, contact: input.contact?.trim().slice(0, 200) || null, message: input.message?.trim().slice(0, 3000) || null, signature: signature ?? null, version: proposal.shareVersion! },
   });
   const who = `${name}${input.contact ? ` (${input.contact.trim().slice(0, 200)})` : ""}`;
   if (input.kind === "ACCEPT") {
@@ -118,7 +124,7 @@ export async function respondToProposal(token: string, input: { kind: "ACCEPT" |
       db.proposal.update({ where: { id: proposal.id }, data: { status: "ACCEPTED", acceptedAt: new Date() } }),
       db.followUp.updateMany({ where: { proposalId: proposal.id, status: "PENDING", type: { in: REPLY_ENDS } }, data: { status: "CANCELLED", result: "Client accepted the proposal online" } }),
     ]);
-    await logActivity({ workspaceId: proposal.workspaceId, prospectId: proposal.prospectId, type: "proposal.accepted_online", message: `Proposal v${proposal.shareVersion} accepted online by ${who}` });
+    await logActivity({ workspaceId: proposal.workspaceId, prospectId: proposal.prospectId, type: "proposal.accepted_online", message: `Proposal v${proposal.shareVersion} accepted and signed online by ${who}` });
     // A prospect already closed (lost / not interested) is not reopened automatically.
     const closed = proposal.prospect.status !== "WON" && (await db.pipelineStatus.findFirst({ where: { workspaceId: proposal.workspaceId, key: proposal.prospect.status, isTerminal: true } }));
     const won = closed ? null : await markWon(proposal.workspaceId, proposal.prospectId, { proposalId: proposal.id, reason: `proposal accepted online by ${who}` });

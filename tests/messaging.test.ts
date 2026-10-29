@@ -294,7 +294,12 @@ describe("sending (database + local SMTP server)", () => {
 
     await expect(respondToProposal(token, { kind: "QUESTION", name: "S" })).rejects.toThrow(/name/);
     await respondToProposal(token, { kind: "QUESTION", name: "Sara Khan", contact: "sara@client.example", message: "Can we start next month?" });
-    await respondToProposal(token, { kind: "ACCEPT", name: "Sara Khan", message: "Let's go" });
+    // Accepting needs a drawn signature (PNG data URI); it is stored with the response.
+    await expect(respondToProposal(token, { kind: "ACCEPT", name: "Sara Khan" })).rejects.toThrow(/sign/);
+    await expect(respondToProposal(token, { kind: "ACCEPT", name: "Sara Khan", signature: "data:text/html;base64,PHNjcmlwdD4=" })).rejects.toThrow(/sign/);
+    const signature = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    await respondToProposal(token, { kind: "ACCEPT", name: "Sara Khan", message: "Let's go", signature });
+    expect((await db.proposalResponse.findFirst({ where: { kind: "ACCEPT", name: "Sara Khan" }, orderBy: { createdAt: "desc" } }))?.signature).toBe(signature);
     expect((await respondToProposal(token, { kind: "ACCEPT", name: "Sara Khan" })).alreadyAccepted).toBe(true);
 
     const p = await db.proposal.findUniqueOrThrow({ where: { id: proposal.id }, include: { responses: true, prospect: true, followUps: true } });
