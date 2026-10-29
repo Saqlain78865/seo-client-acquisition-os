@@ -60,3 +60,4 @@ next-env.d.ts
 /desktop/build
 /desktop/dist
 /desktop/app/icon.png
+/demo-storage
