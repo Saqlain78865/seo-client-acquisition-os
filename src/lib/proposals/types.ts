@@ -85,7 +85,14 @@ export const proposalGbpSchema = z.object({
 });
 export type ProposalGbp = z.infer<typeof proposalGbpSchema>;
 
-export const proposalReviewSchema = z.object({ rating: z.number().int().min(1).max(5), text: z.string().max(600), when: z.string().max(60).nullable() });
+export const proposalReviewSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  text: z.string().max(600),
+  when: z.string().max(60).nullable(),
+  /** From the review check: POLICY = appears to break a Google policy (removal can be requested), GENUINE = answer and outweigh. */
+  verdict: z.enum(["POLICY", "GENUINE"]).nullable().optional(),
+  policy: z.string().max(120).nullable().optional(),
+});
 export type ProposalReview = z.infer<typeof proposalReviewSchema>;
 
 /** Homepage screenshots (storage keys) for "how your website looks today". */

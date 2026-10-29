@@ -10,7 +10,8 @@ import { htmlToPdf } from "./pdf";
 import { pdfFooterTemplate, renderProposalHtml, type RenderVersion } from "./render";
 import { THEME_KEYS } from "./theme";
 import { PAGE_TYPE_LABELS, type PageType } from "../crawler/classify";
-import { badReviews, gbpIssues, type GbpData } from "../research/gbp";
+import { gbpIssues, type GbpData } from "../research/gbp";
+import { checksOf, proposalReviews } from "../reputation";
 import {
   ROADMAPS,
   SERVICE_KEYS,
@@ -103,9 +104,7 @@ export async function proposalGbp(prospectId: string, domain: string): Promise<{
       rankings: data.rankings.slice(0, 5).map((r) => ({ query: r.query.slice(0, 120), position: r.position, total: r.total })),
       issues: gbpIssues(g, domain).slice(0, 15).map((i) => ({ severity: i.severity, title: i.title.slice(0, 200), fix: i.fix.slice(0, 400) })),
     },
-    badReviews: badReviews(g)
-      .slice(0, 5)
-      .map((r) => ({ rating: Math.min(5, Math.max(1, Math.round(r.rating))), text: r.text.length > 600 ? `${r.text.slice(0, 597)}…` : r.text, when: r.when })),
+    badReviews: proposalReviews(data.reviews, checksOf(row), 5),
   };
 }
 
@@ -224,7 +223,8 @@ export async function getProposalWithVersion(workspaceId: string, proposalId: st
 export async function withImages(rv: RenderVersion, workspaceId: string): Promise<RenderVersion> {
   const keys = new Set<string>();
   for (const s of rv.sections) {
-    const d = (s.data ?? {}) as { findings?: { screenshot?: string | null }[]; screens?: { desktop: string | null; mobile: string | null; after?: string | null } };
+    const d = (s.data ?? {}) as { findings?: { screenshot?: string | null }[]; screens?: { desktop: string | null; mobile: string | null; after?: string | null }; shots?: string[] };
+    for (const k of d.shots ?? []) keys.add(k);
     for (const f of d.findings ?? []) if (f.screenshot) keys.add(f.screenshot);
     if (d.screens?.desktop) keys.add(d.screens.desktop);
     if (d.screens?.mobile) keys.add(d.screens.mobile);
@@ -235,7 +235,10 @@ export async function withImages(rv: RenderVersion, workspaceId: string): Promis
   for (const key of keys) {
     if (!key.startsWith(prefix) || key.includes("..")) continue;
     try {
-      images[key] = `data:image/jpeg;base64,${(await getFile(key)).toString("base64")}`;
+      const buf = await getFile(key);
+      // Uploaded review screenshots may be PNG or WebP; audit screenshots are JPEG.
+      const type = buf[0] === 0x89 ? "png" : buf.subarray(8, 12).toString() === "WEBP" ? "webp" : "jpeg";
+      images[key] = `data:image/${type};base64,${buf.toString("base64")}`;
     } catch {
       // A deleted screenshot is simply left out.
     }
@@ -275,7 +278,8 @@ const sectionDataSchema = z
     keywords: z.array(proposalKeywordSchema).max(MAX_PROPOSAL_KEYWORDS).optional(),
     screens: proposalScreensSchema.optional(),
     gbp: proposalGbpSchema.optional(),
-    reviews: z.array(proposalReviewSchema).max(5).optional(),
+    reviews: z.array(proposalReviewSchema).max(10).optional(),
+    shots: z.array(z.string().max(300)).max(12).optional(),
   })
   .nullable()
   .optional();

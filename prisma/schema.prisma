@@ -93,6 +93,7 @@ model Workspace {
   domainChecks     DomainCheck[]
   auditBatches     AuditBatch[]
   gbpProfiles      GbpProfile[]
+  reviewScreenshots ReviewScreenshot[]
   kickoffTasks     KickoffTask[]
   clientTasks      ClientTask[]
   campaigns        Campaign[]
@@ -197,6 +198,7 @@ model Prospect {
   performanceTests  PerformanceTest[]
   domainChecks      DomainCheck[]
   gbpProfiles       GbpProfile[]
+  reviewScreenshots ReviewScreenshot[]
   kickoffTasks      KickoffTask[]
   clientTasks       ClientTask[]
 
@@ -979,6 +981,8 @@ model GbpProfile {
   reviews        Json
   // [{ query, position, total, checkedAt }] — position in Google Maps results, null when not in the results
   rankings       Json
+  // Gemini check of the negative reviews: [{ index, verdict: POLICY|GENUINE, policy, reason, reply }]
+  reviewChecks   Json?
   fetchedAt      DateTime @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1092,4 +1096,19 @@ model CampaignRecipient {
 
   @@unique([campaignId, proposalId])
   @@index([campaignId, status, sortOrder])
+}
+
+/// A screenshot of a review the user captured (e.g. a bad review on Google), shown in the reputation proposal.
+model ReviewScreenshot {
+  id          String   @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  storageKey  String
+  caption     String?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, createdAt])
 }

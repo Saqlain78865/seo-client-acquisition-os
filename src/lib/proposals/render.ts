@@ -49,6 +49,8 @@ type SectionData = {
   screens?: ProposalScreens;
   gbp?: ProposalGbp;
   reviews?: ProposalReview[];
+  /** Review screenshots the user captured (storage keys). */
+  shots?: string[];
 };
 
 export function escapeHtml(s: string) {
@@ -309,7 +311,10 @@ function gbpBlock(g: ProposalGbp) {
 
 function reviewCards(reviews: ProposalReview[]) {
   return `<div class="reviews">${reviews
-    .map((r) => `<blockquote>${stars(r.rating, 13)}<p>“${escapeHtml(r.text)}”</p>${r.when ? `<cite>Google review · ${escapeHtml(r.when)}</cite>` : "<cite>Google review</cite>"}</blockquote>`)
+    .map((r) => {
+      const tag = r.verdict === "POLICY" ? `<span class="rv rv-policy">Breaks Google policy${r.policy ? ` · ${escapeHtml(r.policy)}` : ""} — removal can be requested</span>` : r.verdict === "GENUINE" ? `<span class="rv rv-genuine">Genuine complaint — professional reply</span>` : "";
+      return `<blockquote${r.verdict === "POLICY" ? ' class="policy"' : ""}>${stars(r.rating, 13)}${tag}<p>“${escapeHtml(r.text)}”</p>${r.when ? `<cite>Google review · ${escapeHtml(r.when)}</cite>` : "<cite>Google review</cite>"}</blockquote>`;
+    })
     .join("")}</div>`;
 }
 
@@ -358,7 +363,10 @@ function sectionExtras(key: string, data: unknown, v: RenderVersion, client: Ren
     if (devices || beforeAfter) return devices + beforeAfter;
   }
   if (key === "gbp" && d.gbp) return gbpBlock(d.gbp);
-  if (key === "reputation" && d.reviews?.length) return reviewCards(d.reviews);
+  if (key === "reputation" && (d.reviews?.length || d.shots?.length)) {
+    const shots = (d.shots ?? []).map(img).filter((x): x is string => !!x);
+    return `${d.reviews?.length ? reviewCards(d.reviews) : ""}${shots.length ? `<h3 class="ptitle">As your customers see it on Google</h3><div class="rshots">${shots.map((src) => `<figure><img src="${src}" alt="Screenshot of a Google review"></figure>`).join("")}</div>` : ""}`;
+  }
   if (key === "roadmap" && d.phases?.length) {
     return `<div class="phases">${d.phases
       .map((p, i) => `<div class="phase"><div class="dot">${i + 1}</div><div><div class="period">${escapeHtml(p.period)}</div><h3>${escapeHtml(p.title)}</h3><ul class="checks">${p.items.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div></div>`)
@@ -576,6 +584,12 @@ export function renderProposalHtml(v: RenderVersion, client: RenderClient) {
   .reviews blockquote { margin: 0; border-radius: 12px; padding: 4mm; background: #fff7f7; border: 1px solid #fecaca; break-inside: avoid; }
   .reviews p { margin: 2mm 0; font-style: italic; color: #334155; font-size: 9.5pt; } .reviews cite { font-size: 8pt; color: var(--muted); font-style: normal; }
   .stars svg { vertical-align: -2px; margin-right: 1px; }
+  .reviews blockquote.policy { background: #fffbeb; border-color: #fcd34d; }
+  .rv { display: inline-block; margin-left: 2mm; padding: .6mm 2.2mm; border-radius: 99px; font-size: 7.5pt; font-weight: 700; vertical-align: 1px; }
+  .rv-policy { background: #fef3c7; color: #92400e; } .rv-genuine { background: #e0e7ff; color: #3730a3; }
+  .rshots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4mm; margin: 2mm 0 5mm; }
+  .rshots figure { margin: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; break-inside: avoid; background: #fff; box-shadow: 0 4px 14px rgba(15,23,42,.08); }
+  .rshots img { display: block; width: 100%; height: auto; }
 
   /* Roadmap */
   .phases { display: grid; gap: 4mm; } .phase { display: grid; grid-template-columns: 10mm 1fr; gap: 4mm; border: 1px solid var(--border); border-radius: 12px; padding: 4mm; break-inside: avoid; background: #fff; }
@@ -596,7 +610,7 @@ export function renderProposalHtml(v: RenderVersion, client: RenderClient) {
     .glance, main { background: #fff; padding: 16mm 15mm; margin-bottom: 8mm; box-shadow: 0 10px 30px rgba(15,23,42,.08); }
   }
   @media screen and (max-width: 700px) {
-    .ggrid, .with-shot, .gbp, .devices, .beforeafter, .tiles, .prio, ol.steps, .reviews, .finding.compact .fgrid { grid-template-columns: 1fr; }
+    .ggrid, .with-shot, .gbp, .devices, .beforeafter, .tiles, .prio, ol.steps, .reviews, .rshots, .finding.compact .fgrid { grid-template-columns: 1fr; }
     .cover { padding: 14mm 8mm; } .cover h1 { font-size: 26pt; } .glance, main { padding: 10mm 6mm; }
   }
   [dir=rtl] body { font-size: 11.5pt; line-height: 1.9; }

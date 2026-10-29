@@ -81,6 +81,13 @@ export async function afterAudit(auditId: string) {
         const { fetchGbpProfile } = await import("../research/service");
         await fetchGbpProfile(audit.workspaceId, audit.requestedById, audit.prospectId).catch((e) => log.info("business profile not fetched", { auditId, reason: (e as Error).message }));
       }
+      // Negative reviews are checked against Google's policies, so the proposal can say which can be challenged.
+      const gbp = await db.gbpProfile.findFirst({ where: { prospectId: audit.prospectId }, orderBy: { fetchedAt: "desc" }, select: { reviewChecks: true, reviews: true } });
+      const hasBad = ((gbp?.reviews as { rating: number }[] | null) ?? []).some((r) => r.rating <= 3);
+      if (gbp && hasBad && !gbp.reviewChecks && (await getApiKey(audit.workspaceId, "GEMINI"))) {
+        const { checkReviews } = await import("../reputation");
+        await checkReviews(audit.workspaceId, audit.prospectId).catch((e) => log.info("review check skipped", { auditId, reason: (e as Error).message }));
+      }
     }
 
     let proposalId: string | null = null;

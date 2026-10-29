@@ -36,8 +36,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // The desktop app ships a self-contained server (see desktop/build.mjs).
   ...(process.env.NEXT_STANDALONE === "1" ? { output: "standalone" as const } : {}),
-  // Logo uploads are capped at 1 MB in the action; leave room for multipart overhead.
-  experimental: { serverActions: { bodySizeLimit: "1.2mb" } },
+  // Uploads are capped in their actions (logo 1 MB, review screenshot 6 MB, one file per request); leave room for multipart overhead.
+  experimental: { serverActions: { bodySizeLimit: "7mb" } },
   serverExternalPackages: ["better-sqlite3", "@prisma/adapter-better-sqlite3", "playwright", "playwright-core"],
   turbopack: {
     rules: {
