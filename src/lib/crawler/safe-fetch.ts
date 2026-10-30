@@ -37,10 +37,11 @@ function agentFor(allowPrivate: boolean) {
   let agent = agents.get(allowPrivate);
   if (!agent) {
     agent = new Agent({
-      connect: { lookup: guardedLookup({ allowPrivateNetworks: allowPrivate }), timeout: 15_000 },
+      // Generous socket limits: the per-request timeout below decides when to give up (slow sites can take 10–30 s).
+      connect: { lookup: guardedLookup({ allowPrivateNetworks: allowPrivate }), timeout: 20_000 },
       connections: 4,
-      headersTimeout: 15_000,
-      bodyTimeout: 20_000,
+      headersTimeout: 60_000,
+      bodyTimeout: 60_000,
     });
     agents.set(allowPrivate, agent);
   }
@@ -94,7 +95,7 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
 }
 
 async function safeFetchOnce(rawUrl: string, options: SafeFetchOptions): Promise<FetchResult> {
-  const { timeoutMs = 15_000, maxBytes = 3 * 1024 * 1024, maxRedirects = 5, method = "GET", allowPrivateNetworks = false } = options;
+  const { timeoutMs = 30_000, maxBytes = 3 * 1024 * 1024, maxRedirects = 5, method = "GET", allowPrivateNetworks = false } = options;
   const acceptBody = options.acceptBody ?? (() => true);
   const chain: { url: string; status: number }[] = [];
   let current = rawUrl;

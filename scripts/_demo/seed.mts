@@ -1,6 +1,5 @@
 // Builds demo.db for the product video: real audits of fictional local sites, proposals in every
 // state, a reputation case, pipeline, deals and client work. Run with DATABASE_URL=file:./demo.db.
-import { chromium } from "playwright";
 import { db } from "../../src/lib/db.ts";
 import bcrypt from "bcryptjs";
 const hashPassword = (p: string) => bcrypt.hash(p, 12);
@@ -8,8 +7,7 @@ import { createWorkspace } from "../../src/lib/workspace.ts";
 import { createProspect } from "../../src/lib/prospects.ts";
 import { runnerOptions } from "../../src/lib/audit/runner.ts";
 import { startAudit } from "../../src/lib/audit/service.ts";
-import { saveManualGbp, latestGbp } from "../../src/lib/research/service.ts";
-import { addReviewScreenshot, createReputationProposal, reviewKey } from "../../src/lib/reputation.ts";
+import { saveManualGbp } from "../../src/lib/research/service.ts";
 import { markSent } from "../../src/lib/messaging/service.ts";
 import { createShareLink } from "../../src/lib/messaging/share.ts";
 import { markSeenOnWhatsApp, markSentOnWhatsApp } from "../../src/lib/messaging/manual.ts";
@@ -91,7 +89,7 @@ await markSentOnWhatsApp(ws.id, user.id, moversP.id);
 await markSeenOnWhatsApp(ws.id, user.id, moversP.id);
 await db.followUp.updateMany({ where: { proposalId: moversP.id, type: "OPENED_NO_REPLY" }, data: { dueAt: new Date(Date.now() - DAY) } });
 
-// ── Desert Sky: Google reviews, policy check and screenshots, reputation proposal ──
+// ── Desert Sky: its Google Business Profile with a few bad reviews ──
 await saveManualGbp(ws.id, user.id, sky, {
   name: "Desert Sky Balloon Rides",
   rating: 3.7,
@@ -108,29 +106,6 @@ await saveManualGbp(ws.id, user.id, sky, {
     "1★ Terrible terrible terrible. Never again.",
   ].join("\n\n"),
 });
-const gbp = (await latestGbp(sky))!;
-const bad = (gbp.reviews as { text: string }[]).filter(Boolean);
-await db.gbpProfile.update({
-  where: { id: gbp.id },
-  data: {
-    reviewChecks: [
-      { key: reviewKey(bad[0].text), verdict: "POLICY", policy: "Conflict of interest", reason: "Promotes a named competitor and describes no flight.", reply: "We have no booking under this name. If you flew with us, please contact bookings@desertskyballoons.ae so we can help." },
-      { key: reviewKey(bad[1].text), verdict: "GENUINE", policy: null, reason: "A real complaint about a late pickup.", reply: "We're sorry the pickup was late — that is not the experience we want for you. Please message us so we can make it right." },
-      { key: reviewKey(bad[2].text), verdict: "POLICY", policy: "Fake engagement", reason: "No experience described; posted the same day as several similar 1-star reviews.", reply: "We can't find a booking that matches this review. Please get in touch so we can look into it." },
-    ],
-  },
-});
-const browser = await chromium.launch();
-const shotPage = await browser.newPage({ viewport: { width: 520, height: 210 }, deviceScaleFactor: 2 });
-for (const [stars, who, when, text] of [
-  [1, "Ahmed K.", "2 weeks ago", "Total scam!! Don't book here, go with SkyHigh Balloons instead, they are much better and cheaper."],
-  [1, "J. Smith", "2 weeks ago", "Terrible terrible terrible. Never again."],
-] as const) {
-  await shotPage.setContent(`<body style="margin:0;font-family:Arial;background:#fff"><div style="padding:18px 20px"><div style="display:flex;gap:12px;align-items:center"><div style="width:40px;height:40px;border-radius:50%;background:#7c3aed;color:#fff;display:grid;place-items:center;font-weight:bold">${who[0]}</div><div><b style="font-size:15px">${who}</b><div style="font-size:12px;color:#70757a">1 review · 0 photos</div></div></div><div style="margin-top:10px;font-size:14px"><span style="color:#fbbc04">${"★".repeat(stars)}</span><span style="color:#dadce0">${"★".repeat(5 - stars)}</span> <span style="color:#70757a;font-size:12px">${when}</span></div><p style="font-size:14px;color:#202124;margin:8px 0 0">${text}</p></div></body>`);
-  await addReviewScreenshot(ws.id, sky, { type: "image/png", bytes: await shotPage.screenshot({ type: "png" }) }, `${stars}-star review`);
-}
-await browser.close();
-await createReputationProposal(ws.id, user.id, sky);
 
 // ── More pipeline: a won client with monthly work, a meeting, new leads ──
 const extra = [

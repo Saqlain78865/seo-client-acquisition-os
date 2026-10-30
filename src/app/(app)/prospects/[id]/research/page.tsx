@@ -15,9 +15,6 @@ import { DOMAIN_SOURCES, type DomainOverview } from "@/lib/research/domain";
 import { getApiKey } from "@/lib/integrations";
 import { defaultGbpQueries, gbpRowToData, latestGbp } from "@/lib/research/service";
 import { GbpPanel } from "./gbp-panel";
-import { ReputationCard } from "./reputation-card";
-import { badReviews } from "@/lib/research/gbp";
-import { checksOf, reviewKey } from "@/lib/reputation";
 
 export const metadata: Metadata = { title: "Research" };
 
@@ -89,19 +86,6 @@ export default async function ResearchPage({ params, searchParams }: { params: P
           placesReady={!!(await getApiKey(session.workspace.id, "PLACES"))}
           defaultQueries={await defaultGbpQueries(session.workspace.id, id)}
         />
-      )}
-      {tab === "gbp" && gbpRow && (
-        <div className="mt-6">
-          <ReputationCard
-            prospectId={id}
-            reviews={badReviews(gbpRowToData(gbpRow)).map((r) => {
-              const c = checksOf(gbpRow).get(reviewKey(r.text));
-              return { rating: Math.min(5, Math.max(1, Math.round(r.rating))), text: r.text, when: r.when, verdict: c?.verdict ?? null, policy: c?.policy ?? null, reason: c?.reason ?? null, reply: c?.reply ?? null };
-            })}
-            shots={await db.reviewScreenshot.findMany({ where: { prospectId: id, workspaceId: session.workspace.id }, orderBy: { createdAt: "asc" }, select: { id: true, caption: true } })}
-            aiReady={!!(await getApiKey(session.workspace.id, "GEMINI"))}
-          />
-        </div>
       )}
 
       {tab === "keywords" && (

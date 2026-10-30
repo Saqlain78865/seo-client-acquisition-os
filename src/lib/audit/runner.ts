@@ -26,7 +26,7 @@ type Finding = FindingDraft & { priority: number };
 const QUICK_PAGE_LIMIT = 12;
 
 /** Test hook: lets the integration tests crawl a local fixture server. Never set in production. */
-export const runnerOptions = { allowPrivateNetworks: false };
+export const runnerOptions = { allowPrivateNetworks: false, aiRetryDelayMs: 30_000 };
 
 export async function setStage(auditId: string, stage: StageKey, status: StageStatus, message?: string, output?: unknown) {
   const now = new Date();
@@ -372,11 +372,12 @@ export async function runAudit(auditId: string) {
         await persistCrawl(auditId, result);
         const ok = result.pages.filter((p) => p.page).length;
         if (ok === 0) throw new Error(`No HTML pages could be analysed (${result.pages[0]?.error ?? `HTTP ${result.pages[0]?.status}`}).`);
-        // 4xx/5xx pages and redirects are findings, not crawl failures; only unreachable URLs make the crawl partial.
+        // 4xx/5xx pages and redirects are findings, not crawl failures. Unreachable URLs (after a second,
+        // slower attempt) only make the crawl partial when they are a real share of the site.
         const unreachable = result.pages.filter((p) => p.status === null).length;
         return {
           value: await loadAuditInput(auditId, context),
-          status: unreachable > 0 ? "PARTIAL" : "COMPLETED",
+          status: unreachable > Math.max(2, result.pages.length * 0.1) ? "PARTIAL" : "COMPLETED",
           message: `${ok} pages analysed${unreachable ? `, ${unreachable} could not be fetched` : ""}${result.limitReached ? " (page limit reached)" : ""}`,
           output: { analysed: ok, attempted: result.pages.length, skipped: result.skipped.length, limitReached: result.limitReached },
         };
@@ -394,6 +395,8 @@ export async function runAudit(auditId: string) {
       "BUSINESS_IDENTIFICATION",
       async () => {
         const profile = identifyBusiness(input.pages, contacts);
+        // Not every site states its name in a machine-readable way: the name entered for the audit is used then.
+        const known = audit.prospect.businessName !== audit.prospect.domain ? audit.prospect.businessName : null;
         // A prospect created from just a URL is named after its domain; replace that placeholder (still unverified).
         if (profile.name && audit.prospect.businessName === audit.prospect.domain) {
           await db.prospect.update({ where: { id: audit.prospectId }, data: { businessName: profile.name.value } });
@@ -401,8 +404,12 @@ export async function runAudit(auditId: string) {
         return {
           value: profile,
           output: profile,
-          message: profile.name ? `Likely business name: ${profile.name.value} (unverified)` : "Business name could not be inferred",
-          status: profile.name ? "COMPLETED" : "PARTIAL",
+          message: profile.name
+            ? `Likely business name: ${profile.name.value} (unverified)`
+            : known
+              ? `The website does not state its name clearly — using “${known}”`
+              : "The website does not state its name clearly — add it on the prospect page",
+          status: "COMPLETED",
         };
       },
       async () => ((await stageDone(auditId, "BUSINESS_IDENTIFICATION"))!.output as BusinessProfile),
@@ -484,7 +491,8 @@ export async function runAudit(auditId: string) {
           value: undefined,
           message: `${contacts.length} public contact details found, ${created} new`,
           output: { found: contacts.length, created, byType: contacts.reduce<Record<string, number>>((a, c) => ((a[c.type] = (a[c.type] ?? 0) + 1), a), {}) },
-          status: contacts.some((c) => c.type === "EMAIL" || c.type === "PHONE") ? "COMPLETED" : "PARTIAL",
+          // A site without a public email or phone is a finding about the site, not a failed audit step.
+          status: "COMPLETED",
         };
       },
       async () => undefined,
@@ -604,14 +612,19 @@ export async function runAudit(auditId: string) {
         if (!provider) {
           return { value: null, status: "SKIPPED", message: "No AI provider configured (add GEMINI_API_KEY). The rule-based summary is used instead." };
         }
-        try {
-          const result = await runAiAnalysis(provider, business, findings);
-          return { value: result, output: { provider: provider.name, model: provider.model, ...result }, message: `${provider.name} (${provider.model})` };
-        } catch (e) {
-          // AI is optional: the audit stays valid without it.
-          const msg = e instanceof AiError ? e.message : "AI analysis failed";
-          return { value: null, status: "FAILED", message: msg };
+        // Gemini is often briefly busy on the free tier: one more try after a pause, then the rule-based summary.
+        let last = "";
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const result = await runAiAnalysis(provider, business, findings);
+            return { value: result, output: { provider: provider.name, model: provider.model, ...result }, message: `${provider.name} (${provider.model})` };
+          } catch (e) {
+            last = e instanceof AiError ? e.message : "AI analysis failed";
+            if (attempt === 0) await new Promise((r) => setTimeout(r, runnerOptions.aiRetryDelayMs));
+          }
         }
+        // AI is optional: the audit is complete without it.
+        return { value: null, status: "SKIPPED", message: `AI summary unavailable (${last}) — the rule-based summary is used instead.` };
       },
       async () => {
         const r = await stageDone(auditId, "AI_ANALYSIS");
@@ -672,7 +685,7 @@ export async function runAudit(auditId: string) {
           `${proposalReady} findings can be used in a proposal`,
           hasRecipient ? "contact details available — verify before outreach" : "no email/phone found — add one manually before outreach",
         ];
-        return { value: undefined, message: notes.join("; "), status: proposalReady > 0 ? "COMPLETED" : "PARTIAL", output: { proposalReady, hasRecipient: hasRecipient > 0 } };
+        return { value: undefined, message: notes.join("; "), status: "COMPLETED", output: { proposalReady, hasRecipient: hasRecipient > 0 } };
       },
       async () => undefined,
     );

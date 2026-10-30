@@ -222,26 +222,6 @@ await page.waitForLoadState("networkidle").catch(() => {});
 await cap("Sent on WhatsApp? Mark it — and when they've seen it", "LeadLift schedules the follow-up and prepares the message");
 await wait(4200);
 
-// ── 8. Reputation ──
-await nav("Reputation");
-await cap("Reputation — bad Google reviews into a proposal", "Add a business by its Google Maps link, or name and website");
-await wait(3000);
-await click(page.getByRole("link", { name: /Desert Sky Balloon Rides/ }));
-await page.waitForLoadState("networkidle").catch(() => {});
-await cap("AI checks every bad review against Google's policies", "Which can be reported for removal — and which need a professional reply");
-await scrollToEl(page.getByText("Reputation — bad reviews"), 90, 1800);
-await wait(4200);
-await nav("SEO Proposals");
-await click(page.getByRole("link", { name: /Reputation rescue plan/ }));
-await page.waitForLoadState("networkidle").catch(() => {});
-await cap("A reputation proposal the client wants to accept", "Their bad reviews, your screenshots and an honest plan");
-await wait(1200);
-// The preview frame runs no scripts: jump to the section by its anchor, then scroll with the wheel.
-await page.locator('iframe[title="Proposal preview"]').evaluate((f) => (f.src = f.src.split("#")[0] + "#reputation"));
-await wait(900);
-await wheelPreview(1400, 3600);
-await wait(2400);
-
 // ── 9. Bulk, prospects, follow-ups, auto-send, deals, client work ──
 await nav("Bulk Audit");
 await cap("Bulk Audit", "Paste a list of websites — audited three at a time and ranked by opportunity");

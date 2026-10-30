@@ -8,7 +8,6 @@ import { reportError, withReference } from "@/lib/log";
 import { ResearchError, fetchGbpProfile, saveManualGbp, chooseTopKeywords, setKeywordInProposal, addCompetitor, addManualKeywords, analyseKeywords, deleteImport, generateAiKeywordIdeas, generateSeedKeywords, observeCompetitor, runDomainCheck, runPerformanceTest } from "@/lib/research/service";
 import type { Strategy } from "@/lib/research/pagespeed";
 import { draftGbpContent, type GbpDrafts } from "@/lib/research/gbp-drafts";
-import { ReputationError, addPastedReviews, addReviewScreenshot, checkReviews, createReputationProposal, deleteReviewScreenshot } from "@/lib/reputation";
 
 export type ResearchResult = { ok: true; message: string } | { ok: false; error: string };
 
@@ -21,65 +20,6 @@ async function run(prospectId: string, fn: (workspaceId: string, userId: string)
   } catch (e) {
     if (e instanceof ResearchError) return { ok: false, error: e.message };
     return { ok: false, error: withReference("Something went wrong. Please try again.", await reportError("research", e)) };
-  }
-}
-
-type Done = { ok: true; message: string } | { ok: false; error: string };
-
-async function reputation(prospectId: string, fn: (workspaceId: string, userId: string) => Promise<string>): Promise<Done> {
-  const session = await requireSession();
-  try {
-    const message = await fn(session.workspace.id, session.user.id);
-    revalidatePath(`/prospects/${prospectId}/research`);
-    return { ok: true, message };
-  } catch (e) {
-    if (e instanceof ReputationError) return { ok: false, error: e.message };
-    return { ok: false, error: withReference("Something went wrong. Please try again.", await reportError("reputation", e)) };
-  }
-}
-
-/** Gemini checks each negative review against Google's review policies. */
-export async function checkReviewsAction(prospectId: string) {
-  return reputation(prospectId, async (ws) => {
-    const r = await checkReviews(ws, prospectId);
-    return `${r.checked} review${r.checked === 1 ? "" : "s"} checked — ${r.policy} may break Google policy`;
-  });
-}
-
-/** One screenshot per request (keeps each upload under the action size limit). */
-export async function uploadReviewShotAction(prospectId: string, formData: FormData) {
-  return reputation(prospectId, async (ws) => {
-    const file = formData.get("file");
-    if (!(file instanceof File) || !file.size) throw new ReputationError("Choose a screenshot.");
-    const r = await addReviewScreenshot(ws, prospectId, { type: file.type, bytes: Buffer.from(await file.arrayBuffer()) }, String(formData.get("caption") ?? ""));
-    return r.read == null ? "Screenshot added" : r.read ? `Screenshot added — AI read ${r.read} new review${r.read === 1 ? "" : "s"}` : "Screenshot added — no new reviews found in it";
-  });
-}
-
-/** Reviews pasted as text into the reputation card. */
-export async function pasteReviewsAction(prospectId: string, text: string) {
-  return reputation(prospectId, async (ws) => {
-    const n = await addPastedReviews(ws, prospectId, text);
-    return n ? `${n} review${n === 1 ? "" : "s"} added` : "Those reviews are already in the list";
-  });
-}
-
-export async function deleteReviewShotAction(prospectId: string, id: string) {
-  return reputation(prospectId, async (ws) => {
-    await deleteReviewScreenshot(ws, id);
-    return "Screenshot removed";
-  });
-}
-
-export async function createReputationProposalAction(prospectId: string): Promise<{ ok: true; proposalId: string } | { ok: false; error: string }> {
-  const session = await requireSession();
-  try {
-    const p = await createReputationProposal(session.workspace.id, session.user.id, prospectId);
-    revalidatePath("/proposals");
-    return { ok: true, proposalId: p.id };
-  } catch (e) {
-    if (e instanceof ReputationError) return { ok: false, error: e.message };
-    return { ok: false, error: withReference("Something went wrong. Please try again.", await reportError("reputation", e)) };
   }
 }
 

@@ -79,10 +79,11 @@ export async function crawlSite(startUrl: string, options: CrawlOptions): Promis
   await assertPublicHost(start.hostname, guard);
 
   // Resolve the canonical homepage first (follows http→https and www redirects).
-  const first = await safeFetch(`${start.origin}/`, { ...guard, acceptBody: isHtml }).catch((e) => {
+  // Slow sites (uncached WordPress pages can take 10–30 s) get a long first wait and several tries.
+  const first = await safeFetch(`${start.origin}/`, { ...guard, acceptBody: isHtml, timeoutMs: 45_000, retries: 3 }).catch((e) => {
     if (!isTransient(e)) throw e;
     throw new FetchError(
-      `The website did not respond after 3 attempts (${(e as Error).message}). It may be down, overloaded, or blocking automated visitors — try Retry in a few minutes.`,
+      `The website did not respond after 4 attempts (${(e as Error).message}). It may be down, overloaded, or blocking automated visitors — try Retry in a few minutes.`,
       (e as FetchError).url,
       (e as FetchError).code,
     );
@@ -160,7 +161,7 @@ export async function crawlSite(startUrl: string, options: CrawlOptions): Promis
     return run.catch(() => null);
   };
 
-  const crawlOne = async (next: (typeof queue)[number]): Promise<CrawledRecord> => {
+  const crawlOne = async (next: (typeof queue)[number], slow = false): Promise<CrawledRecord> => {
     const record: CrawledRecord = {
       url: next.url,
       finalUrl: null,
@@ -179,7 +180,7 @@ export async function crawlSite(startUrl: string, options: CrawlOptions): Promis
       linkedFrom: next.from,
     };
     try {
-      const res = await safeFetch(next.url, { ...guard, acceptBody: isHtml });
+      const res = await safeFetch(next.url, { ...guard, acceptBody: isHtml, ...(slow ? { timeoutMs: 45_000, retries: 1 } : {}) });
       record.finalUrl = res.finalUrl;
       record.status = res.status;
       record.redirectChain = res.redirectChain;
@@ -223,17 +224,29 @@ export async function crawlSite(startUrl: string, options: CrawlOptions): Promis
   };
 
   let limitReached = false;
+  // A slow or struggling site is crawled one page at a time from then on.
+  let parallel = concurrency;
   while (queue.length) {
     if (pages.length >= options.pageLimit) {
       limitReached = true;
       break;
     }
     queue.sort((a, b) => b.priority - a.priority);
-    const batch = queue.splice(0, Math.min(concurrency, options.pageLimit - pages.length));
+    const batch = queue.splice(0, Math.min(parallel, options.pageLimit - pages.length));
     await options.onProgress?.({ crawled: pages.length, found: queued.size, current: batch[0].url });
     if (pages.length > 0) await sleep(delay);
     // Records keep the order the pages were taken from the queue.
-    pages.push(...(await Promise.all(batch.map(crawlOne))));
+    const done = await Promise.all(batch.map((b) => crawlOne(b)));
+    pages.push(...done);
+    if (done.some((r) => (r.status === null && /timed out|did not respond|ECONNRESET|socket/i.test(r.error ?? "")) || (r.responseTimeMs ?? 0) > 8000)) parallel = 1;
+  }
+  // Second chance for pages that could not be reached: one at a time, with a longer wait.
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i];
+    if (p.status !== null || /^Blocked|off-site/.test(p.error ?? "")) continue;
+    await sleep(delay);
+    const again = await crawlOne({ url: p.url, via: p.discoveredVia, from: p.linkedFrom, priority: 0 }, true);
+    if (again.status !== null) pages[i] = again;
   }
   await options.onProgress?.({ crawled: pages.length, found: queued.size, current: "" });
 

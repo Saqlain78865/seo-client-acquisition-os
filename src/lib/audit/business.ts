@@ -13,6 +13,9 @@ export type BusinessProfile = {
   verified: false;
 };
 
+/** Words that are never a business name on their own. */
+const GENERIC = /^(home|homepage|welcome|index|untitled|main|default|my site|website|logo|all rights reserved)\b/i;
+
 export function titleBrand(title: string | null) {
   if (!title) return null;
   const parts = title.split(/\s[|\-–—:·]\s/).map((s) => s.trim()).filter(Boolean);
@@ -38,6 +41,16 @@ export function identifyBusiness(pages: CrawledRecord[], contacts: ContactCandid
   };
   for (const c of contacts.filter((c) => c.type === "BUSINESS_NAME")) for (const s of c.sources) addName(c.value, s.url, s.method);
   if (home) addName(titleBrand(home.page!.title), home.finalUrl!, "homepage title");
+  // Weaker signals, used only when nothing above found a name.
+  if (!candidates.size && home) {
+    const page = home.page!;
+    const logo = page.images.find((i) => i.alt && /logo/i.test(`${i.alt} ${i.src}`))?.alt?.replace(/\blogo\b/gi, "").replace(/[-|–—:]+\s*$/, "").trim();
+    if (logo && logo.length >= 3 && !GENERIC.test(logo)) addName(logo, home.finalUrl!, "logo text");
+    const copyright = page.footerText.match(/(?:©|&copy;|copyright)\s*(?:\d{4}\s*[-–]?\s*\d{0,4}\s*)?([A-Z][\w&'.\- ]{2,60}?)(?:\.|,|\||all rights|$)/i)?.[1]?.trim();
+    if (copyright && !GENERIC.test(copyright)) addName(copyright, home.finalUrl!, "footer copyright");
+    const title = page.title?.trim();
+    if (!candidates.size && title && title.length <= 40 && !GENERIC.test(title)) addName(title, home.finalUrl!, "homepage title");
+  }
   const nameCandidates = [...candidates.values()].sort((a, b) => b.sources.length - a.sources.length || (a.method === "structured data" ? -1 : 1));
 
   const services = new Map<string, InferredValue>();
