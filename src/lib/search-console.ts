@@ -251,7 +251,7 @@ export async function monthReport(workspaceId: string, websiteId: string, month:
   const range = { start: `${month}-01`, end: ymd(new Date(Date.UTC(y, m, 0))) };
   const prevStart = new Date(Date.UTC(y, m - 2, 1));
   const prev = { start: ymd(prevStart), end: ymd(new Date(Date.UTC(y, m - 1, 0))) };
-  const run = (dimension: Dimension) => explore(workspaceId, websiteId, { ...range, previous: prev, dimension, rowLimit: 250 }, fetchImpl);
+  const run = (dimension: Dimension) => explore(workspaceId, websiteId, { ...range, previous: prev, dimension, rowLimit: 1000 }, fetchImpl);
   const [queries, pages] = await Promise.all([run("query"), run("page")]);
   return { queries, pages };
 }

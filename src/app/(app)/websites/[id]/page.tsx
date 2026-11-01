@@ -7,7 +7,9 @@ import { db } from "@/lib/db";
 import { getWebsite } from "@/lib/websites";
 import { propertyMatches } from "@/lib/search-console";
 import { CHANGE_LABELS, type ChangeKind } from "@/lib/site-changes";
-import { monthKey } from "@/lib/client-work";
+import { isMonthKey, monthKey, shiftMonth } from "@/lib/client-work";
+import { WORK_CATEGORIES, monthWork } from "@/lib/work-log";
+import { WorkLog } from "./work-log";
 import { Alert, Badge, Card, CardHeader, PageHeader, buttonClass } from "@/components/ui";
 import { RefreshOnFocus } from "@/components/refresh-on-focus";
 import { deleteWebsiteAction } from "../actions";
@@ -17,14 +19,17 @@ import { WebsiteChanges } from "./changes";
 
 export const metadata: Metadata = { title: "Website" };
 
-export default async function WebsitePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function WebsitePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ month?: string }> }) {
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  // The work log opens on the current month; the report on the last complete one.
+  const month = isMonthKey(sp.month) ? sp.month : monthKey();
   const session = await requireSession();
   const w = await getWebsite(session.workspace.id, id);
   if (!w) notFound();
-  const [gsc, changes] = await Promise.all([
+  const [gsc, changes, work] = await Promise.all([
     db.integrationConnection.findFirst({ where: { workspaceId: session.workspace.id, provider: "SEARCH_CONSOLE", status: "CONNECTED", encryptedSecret: { not: null } }, select: { accountLabel: true } }),
     db.siteChange.findMany({ where: { websiteId: w.id, workspaceId: session.workspace.id }, orderBy: { detectedAt: "desc" }, take: 60 }),
+    monthWork(session.workspace.id, w.id, month),
   ]);
   const linked = w.gscSiteUrl && propertyMatches(w.gscSiteUrl, w.domain) ? w.gscSiteUrl : null;
 
@@ -44,7 +49,7 @@ export default async function WebsitePage({ params }: { params: Promise<{ id: st
         }
         actions={
           <>
-            <Link href={`/website-report?site=${w.id}&month=${monthKey()}`} className={buttonClass("secondary")}>
+            <Link href={`/website-report?site=${w.id}&month=${shiftMonth(monthKey(), -1)}`} className={buttonClass("primary")}>
               <FileText className="h-4 w-4" /> Monthly report
             </Link>
             <form action={deleteWebsiteAction.bind(null, w.id)}>
@@ -77,6 +82,10 @@ export default async function WebsitePage({ params }: { params: Promise<{ id: st
           <PropertyPicker websiteId={w.id} domain={w.domain} current={linked} />
         </div>
       )}
+
+      <div className="mb-6">
+        <WorkLog websiteId={w.id} month={month} entries={work.map((e) => ({ id: e.id, category: e.category, title: e.title, detail: e.detail, url: e.url, count: e.count }))} categories={WORK_CATEGORIES} />
+      </div>
 
       <Card>
         <CardHeader title="Change log" description="What changed on the live website, found by the weekly check — no login to the site is needed." />

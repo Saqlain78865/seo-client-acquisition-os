@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { WebsiteError, createWebsite, deleteWebsite, type WebsiteKind } from "@/lib/websites";
 import { GscError, explore, linkWebsite, listSites, matchSite, propertyMatches, type ExploreInput, type ExploreResult } from "@/lib/search-console";
 import { checkSiteChanges } from "@/lib/site-changes";
+import { WorkLogError, addWork, deleteWork } from "@/lib/work-log";
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -64,6 +65,30 @@ export async function exploreAction(id: string, input: ExploreInput): Promise<R<
   try {
     return { ok: true, data: await explore(session.workspace.id, id, input) };
   } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function addWorkAction(id: string, input: { month: string; category: string; title?: string; detail?: string; url?: string; count?: number }): Promise<R> {
+  const session = await requireSession();
+  try {
+    await addWork(session.workspace.id, id, input);
+    revalidatePath(`/websites/${id}`);
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof WorkLogError) return { ok: false, error: e.message };
+    return fail(e);
+  }
+}
+
+export async function deleteWorkAction(id: string, entryId: string): Promise<R> {
+  const session = await requireSession();
+  try {
+    await deleteWork(session.workspace.id, entryId);
+    revalidatePath(`/websites/${id}`);
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof WorkLogError) return { ok: false, error: e.message };
     return fail(e);
   }
 }

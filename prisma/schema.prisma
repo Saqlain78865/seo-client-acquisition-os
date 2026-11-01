@@ -1206,6 +1206,27 @@ model Website {
   workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   pageSnapshots PageSnapshot[]
   siteChanges   SiteChange[]
+  workLog       WorkLogEntry[]
 
   @@unique([workspaceId, domain])
+}
+
+/// SEO work done on a website in a month (internal linking, content optimisation, new articles…), entered by the SEO for the monthly report.
+model WorkLogEntry {
+  id          String   @id @default(cuid())
+  workspaceId String
+  websiteId   String
+  // YYYY-MM
+  month       String
+  // INTERNAL_LINKING | CONTENT_OPTIMIZATION | SEMANTIC_SEO | NEW_CONTENT | ONPAGE | TECHNICAL | SCHEMA | SPEED | LINK_BUILDING | LOCAL | OTHER
+  category    String
+  title       String
+  detail      String?
+  url         String?
+  count       Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@index([websiteId, month])
 }
