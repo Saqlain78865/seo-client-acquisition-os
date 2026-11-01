@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/constants";
 
-const PUBLIC_PATHS = ["/login", "/register", "/p/", "/api/webhooks/", "/api/health"];
+// The Google sign-in callback is reached from the system browser (no app cookie); it checks its own
+// signed state and that the person who started the sign-in is an owner or admin.
+const PUBLIC_PATHS = ["/login", "/register", "/p/", "/api/webhooks/", "/api/health", "/api/integrations/google/callback"];
 const REQUEST_ID = "x-request-id";
 
 // Every request gets a correlation id: forwarded to server code (logs, error references) and
