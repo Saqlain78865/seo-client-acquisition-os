@@ -379,7 +379,7 @@ function buildMenu() {
       { role: "editMenu" },
       {
         label: "View",
-        submenu: [{ role: "reload" }, { type: "separator" }, { role: "zoomIn" }, { role: "zoomOut" }, { role: "resetZoom" }, { type: "separator" }, { role: "togglefullscreen" }, { role: "toggleDevTools" }],
+        submenu: [{ role: "reload" }, { label: "Reload", accelerator: "F5", click: () => mainWindow?.webContents.reload(), visible: false }, { type: "separator" }, { role: "zoomIn" }, { role: "zoomOut" }, { role: "resetZoom" }, { type: "separator" }, { role: "togglefullscreen" }, { role: "toggleDevTools" }],
       },
       {
         label: "Help",

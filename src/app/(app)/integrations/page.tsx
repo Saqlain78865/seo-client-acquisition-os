@@ -5,6 +5,7 @@ import { listConnections, type ConnectionView, type Provider } from "@/lib/integ
 import { googleClient, redirectUri } from "@/lib/messaging/google-oauth";
 import { formatDate } from "@/lib/utils";
 import { Alert, Badge, Card, CardHeader, buttonClass } from "@/components/ui";
+import { RefreshOnFocus } from "@/components/refresh-on-focus";
 import { ApiKeyForm, ConnectionButtons, GmailSmtpForm, GoogleAppForm, SmtpForm } from "./cards";
 
 export const metadata: Metadata = { title: "Integrations" };
@@ -82,6 +83,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
   return (
     <>
+      <RefreshOnFocus />
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
         <p className="mt-1 text-sm text-muted">Connections are optional — the app works without them, and each card says exactly what is missing. Secrets are encrypted and never shown again after saving.</p>
