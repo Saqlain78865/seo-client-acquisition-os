@@ -29,8 +29,9 @@ describe("My Websites + Search Console (read-only)", () => {
 
   it("works out date ranges and the previous period", () => {
     const r = rangeFor({ days: 7 }, new Date("2026-11-10T12:00:00Z"));
-    expect(r).toEqual({ start: "2026-11-02", end: "2026-11-08" });
-    expect(previousOf(r)).toEqual({ start: "2026-10-26", end: "2026-11-01" });
+    // Up to yesterday: fresh data is included, as in Search Console.
+    expect(r).toEqual({ start: "2026-11-03", end: "2026-11-09" });
+    expect(previousOf(r)).toEqual({ start: "2026-10-27", end: "2026-11-02" });
     expect(totals([])).toEqual({ clicks: 0, impressions: 0, ctr: 0, position: 0 });
   });
 
@@ -69,6 +70,21 @@ describe("My Websites + Search Console (read-only)", () => {
     expect(r.rows[0]).toMatchObject({ key: "balloon ride dubai", clicks: 25, previous: { clicks: 8, position: 8.5 } });
     expect(r.rows[1]).toMatchObject({ key: "sunrise balloon", previous: null });
     expect(bodies.some((b) => JSON.stringify(b.dimensionFilterGroups ?? "").includes('"operator":"contains","expression":"balloon"'))).toBe(true);
+
+    // Last 24 hours from hourly data, against the 24 hours before, summed per search.
+    const hourly = (async (url: string, init?: RequestInit) => {
+      if (url.startsWith("https://oauth2.googleapis.com/token")) return json({ access_token: "tok", expires_in: 3600 });
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      expect(body.dataState).toBe("HOURLY_ALL");
+      const hours = Array.from({ length: 48 }, (_, i) => new Date(Date.UTC(2026, 10, 1, 12) - i * 3600_000).toISOString().replace(".000Z", "-00:00"));
+      if (body.dimensions.length === 1) return json({ rows: hours.map((h, i) => ({ keys: [h], clicks: i < 24 ? 2 : 1, impressions: 50, ctr: 0.04, position: 5 })) });
+      return json({ rows: hours.map((h, i) => ({ keys: [h, "balloon ride dubai"], clicks: i < 24 ? 2 : 1, impressions: 50, ctr: 0.04, position: i < 24 ? 4 : 6 })) });
+    }) as unknown as typeof fetch;
+    const h = await explore(workspaceId, site.id, { hours: 24, compare: true, dimension: "query" }, hourly);
+    expect(h.series).toHaveLength(24);
+    expect(h.totals.clicks).toBe(48);
+    expect(h.previousTotals?.clicks).toBe(24);
+    expect(h.rows[0]).toMatchObject({ key: "balloon ride dubai", clicks: 48, impressions: 1200, position: 4, previous: { clicks: 24, position: 6 } });
 
     // The monthly report compares with the previous calendar month.
     const m = await monthReport(workspaceId, site.id, "2026-10", fake);

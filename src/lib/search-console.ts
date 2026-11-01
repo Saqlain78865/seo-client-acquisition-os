@@ -99,8 +99,10 @@ export function totals(rows: { clicks: number; impressions: number; position: nu
 }
 
 export type ExploreInput = {
-  /** Last N days ending at the latest day Search Console has (about 2 days ago). */
+  /** Last N days, up to yesterday (fresh data included, as in Search Console). */
   days?: number;
+  /** Last 24 hours, hour by hour (Search Console's hourly data, which may still be filling in). */
+  hours?: 24;
   start?: string;
   end?: string;
   compare?: boolean;
@@ -128,7 +130,7 @@ export type ExploreResult = {
 
 export function rangeFor(input: Pick<ExploreInput, "days" | "start" | "end">, now = new Date()) {
   if (input.start && input.end && /^\d{4}-\d{2}-\d{2}$/.test(input.start) && /^\d{4}-\d{2}-\d{2}$/.test(input.end) && input.start <= input.end) return { start: input.start, end: input.end };
-  const end = new Date(now.getTime() - 2 * DAY);
+  const end = new Date(now.getTime() - DAY);
   const days = Math.min(Math.max(input.days ?? 28, 1), 480);
   return { start: ymd(new Date(end.getTime() - (days - 1) * DAY)), end: ymd(end) };
 }
@@ -150,6 +152,59 @@ function filterGroups(input: ExploreInput) {
 }
 
 /** A Search Console report for one website: totals, a daily chart and a table, optionally against the previous period. */
+type ApiRow = { keys?: string[]; clicks: number; impressions: number; ctr: number; position: number };
+
+/** Adds up rows that share a key (clicks and impressions summed, position weighted by impressions). */
+function aggregate(rows: { key: string; clicks: number; impressions: number; position: number }[]): GscRow[] {
+  const by = new Map<string, { clicks: number; impressions: number; pos: number }>();
+  for (const r of rows) {
+    const a = by.get(r.key) ?? { clicks: 0, impressions: 0, pos: 0 };
+    a.clicks += r.clicks;
+    a.impressions += r.impressions;
+    a.pos += r.position * r.impressions;
+    by.set(r.key, a);
+  }
+  return [...by].map(([key, a]) => ({ key, clicks: a.clicks, impressions: a.impressions, ctr: a.impressions ? a.clicks / a.impressions : 0, position: a.impressions ? a.pos / a.impressions : 0 })).sort((x, y) => y.clicks - x.clicks || y.impressions - x.impressions);
+}
+
+/**
+ * The last 24 hours from Search Console's hourly data, against the 24 hours before. Hours are in
+ * Pacific Time, as Search Console reports them; the newest hours may still be filling in.
+ */
+async function exploreHourly(siteUrl: string, tok: string, input: ExploreInput, fetchImpl: typeof fetch, now = new Date()): Promise<ExploreResult> {
+  const groups = filterGroups(input);
+  const dim = input.dimension === "searchAppearance" ? "query" : input.dimension;
+  const q = (dimensions: string[]) =>
+    call<{ rows?: ApiRow[] }>(
+      tok,
+      `/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+      { startDate: ymd(new Date(now.getTime() - 3 * DAY)), endDate: ymd(now), dimensions, dataState: "HOURLY_ALL", rowLimit: 25000, ...(groups ? { dimensionFilterGroups: groups } : {}) },
+      fetchImpl,
+    ).then((x) => x.rows ?? []);
+  const [hourRows, dimRows] = await Promise.all([q(["hour"]), q(["hour", dim])]);
+  const at = (k: string | undefined) => Date.parse(k ?? "");
+  const latest = Math.max(...hourRows.map((r) => at(r.keys?.[0])).filter(Number.isFinite), 0);
+  const inCurrent = (t: number) => t > latest - DAY && t <= latest;
+  const inPrevious = (t: number) => t > latest - 2 * DAY && t <= latest - DAY;
+  const point = (r: ApiRow) => ({ date: r.keys?.[0] ?? "", clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position });
+  const series = hourRows.filter((r) => inCurrent(at(r.keys?.[0]))).map(point).sort((a, b) => at(a.date) - at(b.date));
+  const prevSeries = hourRows.filter((r) => inPrevious(at(r.keys?.[0]))).map(point).sort((a, b) => at(a.date) - at(b.date));
+  const flat = (keep: (t: number) => boolean) => dimRows.filter((r) => keep(at(r.keys?.[0]))).map((r) => ({ key: r.keys?.[1] ?? "", clicks: r.clicks, impressions: r.impressions, position: r.position }));
+  const rows = aggregate(flat(inCurrent)).slice(0, Math.min(Math.max(input.rowLimit ?? 1000, 10), 5000));
+  const before = new Map(aggregate(flat(inPrevious)).map((r) => [r.key, r]));
+  const span = (list: { date: string }[]) => (list.length ? { start: list[0].date, end: list[list.length - 1].date } : { start: "", end: "" });
+  return {
+    siteUrl,
+    range: span(series),
+    previousRange: input.compare ? span(prevSeries) : null,
+    totals: totals(series),
+    previousTotals: input.compare ? totals(prevSeries) : null,
+    series,
+    previousSeries: input.compare ? prevSeries.map((p) => ({ date: p.date, clicks: p.clicks, impressions: p.impressions })) : [],
+    rows: rows.map((r) => ({ ...r, previous: input.compare ? (before.get(r.key) ?? null) : null })),
+  };
+}
+
 export async function explore(workspaceId: string, websiteId: string, input: ExploreInput, fetchImpl: typeof fetch = fetch): Promise<ExploreResult> {
   const w = await db.website.findFirst({ where: { id: websiteId, workspaceId }, select: { gscSiteUrl: true, domain: true } });
   if (!w) throw new GscError("Website not found.");
@@ -157,6 +212,7 @@ export async function explore(workspaceId: string, websiteId: string, input: Exp
   // Defence in depth: a property that is not this website's own is never read.
   if (!propertyMatches(w.gscSiteUrl, w.domain)) throw new GscError("The linked property does not belong to this website. Link its own property again.");
   const tok = await token(workspaceId, fetchImpl);
+  if (input.hours === 24) return exploreHourly(w.gscSiteUrl, tok, input, fetchImpl);
   const range = rangeFor(input);
   const previousRange = input.previous ?? (input.compare ? previousOf(range) : null);
   const groups = filterGroups(input);
@@ -165,7 +221,8 @@ export async function explore(workspaceId: string, websiteId: string, input: Exp
     call<{ rows?: { keys?: string[]; clicks: number; impressions: number; ctr: number; position: number }[] }>(
       tok,
       `/sites/${encodeURIComponent(w.gscSiteUrl!)}/searchAnalytics/query`,
-      { startDate: r.start, endDate: r.end, dimensions, rowLimit, ...(groups && input.dimension !== "searchAppearance" ? { dimensionFilterGroups: groups } : {}) },
+      // "all" includes the fresh, not yet final days, as the Search Console reports do.
+      { startDate: r.start, endDate: r.end, dimensions, rowLimit, dataState: "all", ...(groups && input.dimension !== "searchAppearance" ? { dimensionFilterGroups: groups } : {}) },
       fetchImpl,
     ).then((x) => (x.rows ?? []).map((row) => ({ key: row.keys?.[0] ?? "", clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position })));
   const limit = Math.min(Math.max(input.rowLimit ?? 1000, 10), 5000);
