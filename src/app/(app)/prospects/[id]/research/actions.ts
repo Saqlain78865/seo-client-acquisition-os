@@ -151,3 +151,14 @@ export async function saveManualGbpAction(prospectId: string, formData: FormData
     return `Business profile saved for ${row.name}`;
   });
 }
+
+/** Google Maps ranking grid (Places API): the business's position for one search from points around it. */
+export async function mapsGridAction(prospectId: string, input: { query: string; size: number; spacingKm: number }) {
+  return run(prospectId, async (ws, userId) => {
+    const { scanMapsGrid } = await import("@/lib/research/places-service");
+    const { gridSummary } = await import("@/lib/research/places-tools");
+    const scan = await scanMapsGrid(ws, userId, prospectId, input);
+    const s = gridSummary(scan.points as never);
+    return `Checked ${s.total} points: top 3 at ${s.top3}, not in the top 20 at ${s.missing}`;
+  });
+}

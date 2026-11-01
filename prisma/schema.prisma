@@ -70,34 +70,38 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships      WorkspaceMembership[]
-  sessions         Session[]
-  settings         WorkspaceSettings?
-  prospects        Prospect[]
-  audits           WebsiteAudit[]
-  proposals        Proposal[]
-  templates        MessageTemplate[]
-  integrations     IntegrationConnection[]
-  followUps        FollowUp[]
-  activities       ActivityLog[]
-  deals            Deal[]
-  pricingPackages  PricingPackage[]
-  backgroundJobs   BackgroundJob[]
-  notifications    Notification[]
-  pipelineStatuses PipelineStatus[]
-  keywords         Keyword[]
-  keywordClusters  KeywordCluster[]
-  competitors      Competitor[]
-  dataImports      DataImport[]
-  performanceTests PerformanceTest[]
-  domainChecks     DomainCheck[]
-  auditBatches     AuditBatch[]
-  gbpProfiles      GbpProfile[]
+  memberships       WorkspaceMembership[]
+  sessions          Session[]
+  settings          WorkspaceSettings?
+  prospects         Prospect[]
+  audits            WebsiteAudit[]
+  proposals         Proposal[]
+  templates         MessageTemplate[]
+  integrations      IntegrationConnection[]
+  followUps         FollowUp[]
+  activities        ActivityLog[]
+  deals             Deal[]
+  pricingPackages   PricingPackage[]
+  backgroundJobs    BackgroundJob[]
+  notifications     Notification[]
+  pipelineStatuses  PipelineStatus[]
+  keywords          Keyword[]
+  keywordClusters   KeywordCluster[]
+  competitors       Competitor[]
+  dataImports       DataImport[]
+  performanceTests  PerformanceTest[]
+  domainChecks      DomainCheck[]
+  auditBatches      AuditBatch[]
+  gbpProfiles       GbpProfile[]
   reviewScreenshots ReviewScreenshot[]
   websites          Website[]
-  kickoffTasks     KickoffTask[]
-  clientTasks      ClientTask[]
-  campaigns        Campaign[]
+  trackedKeywords   TrackedKeyword[]
+  siteAlerts        SiteAlert[]
+  reportDeliveries  ReportDelivery[]
+  mapsScans         MapsGridScan[]
+  kickoffTasks      KickoffTask[]
+  clientTasks       ClientTask[]
+  campaigns         Campaign[]
 }
 
 model WorkspaceMembership {
@@ -114,8 +118,8 @@ model WorkspaceMembership {
 }
 
 model WorkspaceSettings {
-  id                  String  @id @default(cuid())
-  workspaceId         String  @unique
+  id                  String    @id @default(cuid())
+  workspaceId         String    @unique
   consultantName      String?
   companyName         String?
   companyEmail        String?
@@ -123,14 +127,14 @@ model WorkspaceSettings {
   companyWebsite      String?
   consultantWhatsApp  String?
   logoPath            String?
-  defaultCurrency     String  @default("USD")
-  proposalTheme       String  @default("navy")
+  defaultCurrency     String    @default("USD")
+  proposalTheme       String    @default("navy")
   // Hex colour used by the "brand" proposal theme, e.g. #e11d48.
   brandColor          String?
-  crawlPageLimit      Int     @default(40)
-  crawlDelayMs        Int     @default(800)
-  dataRetentionDays   Int     @default(730)
-  followUpDefaultDays String  @default("3,7") // comma-separated day offsets after sending
+  crawlPageLimit      Int       @default(40)
+  crawlDelayMs        Int       @default(800)
+  dataRetentionDays   Int       @default(730)
+  followUpDefaultDays String    @default("3,7") // comma-separated day offsets after sending
   // Shown to the client right after they accept a proposal: a payment link or bank details.
   paymentInstructions String?
   // Monday summary email to the owner: opens, acceptances, follow-ups due.
@@ -208,6 +212,7 @@ model Prospect {
   performanceTests  PerformanceTest[]
   domainChecks      DomainCheck[]
   gbpProfiles       GbpProfile[]
+  mapsScans         MapsGridScan[]
   reviewScreenshots ReviewScreenshot[]
   gscDaily          GscDaily[]
   pageSnapshots     PageSnapshot[]
@@ -275,9 +280,9 @@ model Deal {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  proposal  Proposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect     Prospect      @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  proposal     Proposal?     @relation(fields: [proposalId], references: [id], onDelete: SetNull)
   kickoffTasks KickoffTask[]
 }
 
@@ -359,15 +364,15 @@ model WebsiteAudit {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  prospect  Prospect         @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  batch     AuditBatch?      @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  runs      AuditRun[]
-  crawlJob  CrawlJob?
-  pages     CrawledPage[]
-  findings  AuditFinding[]
-  evidence  EvidenceSource[]
-  proposals Proposal[]
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect    Prospect          @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  batch       AuditBatch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  runs        AuditRun[]
+  crawlJob    CrawlJob?
+  pages       CrawledPage[]
+  findings    AuditFinding[]
+  evidence    EvidenceSource[]
+  proposals   Proposal[]
   screenshots AuditScreenshot[]
 
   @@index([workspaceId, createdAt])
@@ -620,9 +625,9 @@ model Proposal {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  prospect           Prospect           @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  audit              WebsiteAudit?      @relation(fields: [auditId], references: [id], onDelete: SetNull)
+  workspace          Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect           Prospect              @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  audit              WebsiteAudit?         @relation(fields: [auditId], references: [id], onDelete: SetNull)
   versions           ProposalVersion[]
   emailDeliveries    EmailDelivery[]
   whatsappDeliveries WhatsAppDelivery[]
@@ -998,6 +1003,10 @@ model GbpProfile {
   rankings       Json
   // Gemini check of the negative reviews: [{ index, verdict: POLICY|GENUINE, policy, reason, reply }]
   reviewChecks   Json?
+  // Top Google Maps results for the first ranking search, other than this business: [{ name, rating, reviewCount, position }]
+  competitors    Json?
+  lat            Float?
+  lng            Float?
   fetchedAt      DateTime @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1201,12 +1210,26 @@ model Website {
   // The Search Console property of this website only (its domain property or a URL prefix on its host).
   gscSiteUrl       String?
   changesCheckedAt DateTime?
+  // Monthly report email: the day of the month it is prepared (1–28), who receives it, and whether it waits for approval.
+  reportDay        Int?
+  reportEmail      String?
+  reportApproval   Boolean   @default(true)
+  // Uptime: UP | DOWN, the last check and failures in a row.
+  siteStatus       String?
+  siteCheckedAt    DateTime?
+  siteFailures     Int       @default(0)
+  // Daily Search Console checks: tracked keyword positions and the traffic-drop alert.
+  keywordsSyncedAt DateTime?
+  trafficCheckedAt DateTime?
   createdAt        DateTime  @default(now())
 
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   pageSnapshots PageSnapshot[]
   siteChanges   SiteChange[]
   workLog       WorkLogEntry[]
+  keywords      TrackedKeyword[]
+  alerts        SiteAlert[]
+  reports       ReportDelivery[]
 
   @@unique([workspaceId, domain])
 }
@@ -1229,4 +1252,98 @@ model WorkLogEntry {
   website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@index([websiteId, month])
+}
+
+/// Searches picked for daily position tracking, read from Search Console.
+model TrackedKeyword {
+  id          String   @id @default(cuid())
+  workspaceId String
+  websiteId   String
+  keyword     String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website   Website           @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  positions KeywordPosition[]
+
+  @@unique([websiteId, keyword])
+}
+
+model KeywordPosition {
+  id               String @id @default(cuid())
+  trackedKeywordId String
+  // YYYY-MM-DD (Search Console day)
+  date             String
+  // Average position that day; null when the site was not shown for the search
+  position         Float?
+  clicks           Int    @default(0)
+  impressions      Int    @default(0)
+
+  keyword TrackedKeyword @relation(fields: [trackedKeywordId], references: [id], onDelete: Cascade)
+
+  @@unique([trackedKeywordId, date])
+}
+
+/// Problems found on a website: traffic drop, page gone, site down, keyword fell.
+model SiteAlert {
+  id          String    @id @default(cuid())
+  workspaceId String
+  websiteId   String
+  // TRAFFIC_DROP | PAGE_GONE | SITE_DOWN | RANK_DROP
+  kind        String
+  title       String
+  detail      String?
+  url         String?
+  // One alert per problem: repeated checks do not raise it again.
+  dedupeKey   String
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website   Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, dedupeKey])
+  @@index([workspaceId, createdAt])
+}
+
+/// The monthly report of a website prepared for its client: waits for approval, then goes out by email.
+model ReportDelivery {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  websiteId    String
+  // YYYY-MM: the month the report covers
+  month        String
+  to           String
+  // AWAITING_APPROVAL | SENT | FAILED | CANCELLED
+  status       String
+  error        String?
+  approvedById String?
+  createdAt    DateTime  @default(now())
+  sentAt       DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website   Website   @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, month])
+}
+
+/// Google Maps ranking grid of a business: its position for one search from points around the city.
+model MapsGridScan {
+  id          String   @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  query       String
+  placeId     String
+  centerLat   Float
+  centerLng   Float
+  spacingKm   Float
+  size        Int
+  // [{ lat, lng, position }] — position null when not in the top 20
+  points      Json
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, createdAt])
 }

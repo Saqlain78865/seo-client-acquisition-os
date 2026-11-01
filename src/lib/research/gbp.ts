@@ -8,6 +8,8 @@
 
 export type GbpReview = { rating: number; text: string; author: string | null; when: string | null };
 export type GbpRanking = { query: string; position: number | null; total: number; checkedAt: string };
+/** A business shown above or near this one in Google Maps for the same search. */
+export type GbpCompetitor = { name: string; rating: number | null; reviewCount: number; position: number; website: string | null };
 
 export type GbpData = {
   source: "PLACES_API" | "MANUAL";
@@ -26,6 +28,10 @@ export type GbpData = {
   businessStatus: string | null;
   reviews: GbpReview[];
   rankings: GbpRanking[];
+  /** Top three other businesses for the first ranking search (Places API only). */
+  competitors?: GbpCompetitor[];
+  lat?: number | null;
+  lng?: number | null;
 };
 
 export class GbpError extends Error {
@@ -53,6 +59,7 @@ const DETAIL_FIELDS = [
   "primaryTypeDisplayName",
   "businessStatus",
   "editorialSummary",
+  "location",
 ].join(",");
 
 type PlaceSummary = { id: string; displayName?: { text?: string }; websiteUri?: string; formattedAddress?: string };
@@ -67,9 +74,10 @@ type PlaceDetails = PlaceSummary & {
   primaryTypeDisplayName?: { text?: string };
   businessStatus?: string;
   editorialSummary?: { text?: string };
+  location?: { latitude?: number; longitude?: number };
 };
 
-async function places<T>(apiKey: string, path: string, init: { method: "GET" | "POST"; fieldMask: string; body?: unknown }, fetchImpl: typeof fetch): Promise<T> {
+export async function places<T>(apiKey: string, path: string, init: { method: "GET" | "POST"; fieldMask: string; body?: unknown }, fetchImpl: typeof fetch): Promise<T> {
   let res: Response;
   try {
     res = await fetchImpl(`${PLACES}${path}`, {
@@ -116,14 +124,33 @@ export async function findPlace(apiKey: string, q: { businessName: string; domai
 
 /** Position of the place in Google Maps text-search results for each query (top 20), or null when absent. */
 export async function mapsRankings(apiKey: string, placeId: string, queries: string[], fetchImpl: typeof fetch = fetch): Promise<GbpRanking[]> {
-  const out: GbpRanking[] = [];
-  for (const query of queries.slice(0, 3)) {
-    const r = await places<{ places?: { id: string }[] }>(apiKey, "/places:searchText", { method: "POST", fieldMask: "places.id", body: { textQuery: query, pageSize: 20 } }, fetchImpl);
-    const ids = (r.places ?? []).map((p) => p.id);
-    const at = ids.indexOf(placeId);
-    out.push({ query, position: at >= 0 ? at + 1 : null, total: ids.length, checkedAt: new Date().toISOString() });
+  return (await rankingsAndCompetitors(apiKey, placeId, queries, fetchImpl)).rankings;
+}
+
+type RatedPlace = { id: string; displayName?: { text?: string }; rating?: number; userRatingCount?: number; websiteUri?: string };
+
+/**
+ * Maps positions for each query; the first query also reads the ratings of the results, so the
+ * top three competitors can be compared with the business ("your 18 reviews, their 140").
+ */
+export async function rankingsAndCompetitors(apiKey: string, placeId: string, queries: string[], fetchImpl: typeof fetch = fetch) {
+  const rankings: GbpRanking[] = [];
+  let competitors: GbpCompetitor[] = [];
+  for (const [i, query] of queries.slice(0, 3).entries()) {
+    const fieldMask = i === 0 ? "places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri" : "places.id";
+    const r = await places<{ places?: RatedPlace[] }>(apiKey, "/places:searchText", { method: "POST", fieldMask, body: { textQuery: query, pageSize: 20 } }, fetchImpl);
+    const list = r.places ?? [];
+    const at = list.findIndex((p) => p.id === placeId);
+    rankings.push({ query, position: at >= 0 ? at + 1 : null, total: list.length, checkedAt: new Date().toISOString() });
+    if (i === 0) {
+      competitors = list
+        .map((p, n) => ({ p, position: n + 1 }))
+        .filter(({ p }) => p.id !== placeId && p.displayName?.text)
+        .slice(0, 3)
+        .map(({ p, position }) => ({ name: p.displayName!.text!.slice(0, 120), rating: p.rating ?? null, reviewCount: p.userRatingCount ?? 0, position, website: p.websiteUri ?? null }));
+    }
   }
-  return out;
+  return { rankings, competitors };
 }
 
 export async function fetchGbp(apiKey: string, q: { businessName: string; domain: string; city: string | null; queries: string[] }, fetchImpl: typeof fetch = fetch): Promise<GbpData> {
@@ -143,6 +170,7 @@ export async function findPlaceFromLink(apiKey: string, link: { name: string; la
 export async function fetchGbpByPlaceId(apiKey: string, placeId: string, fallbackName: string, queries: string[], fetchImpl: typeof fetch = fetch): Promise<GbpData> {
   const q = { businessName: fallbackName, queries };
   const d = await places<PlaceDetails>(apiKey, `/places/${encodeURIComponent(placeId)}`, { method: "GET", fieldMask: DETAIL_FIELDS }, fetchImpl);
+  const ranked = q.queries.length ? await rankingsAndCompetitors(apiKey, placeId, q.queries, fetchImpl) : { rankings: [], competitors: [] };
   return {
     source: "PLACES_API",
     placeId,
@@ -162,7 +190,10 @@ export async function fetchGbpByPlaceId(apiKey: string, placeId: string, fallbac
     reviews: (d.reviews ?? [])
       .map((r) => ({ rating: r.rating ?? 0, text: (r.originalText?.text ?? r.text?.text ?? "").slice(0, 1500), author: r.authorAttribution?.displayName ?? null, when: r.relativePublishTimeDescription ?? null }))
       .filter((r) => r.rating > 0),
-    rankings: q.queries.length ? await mapsRankings(apiKey, placeId, q.queries, fetchImpl) : [],
+    rankings: ranked.rankings,
+    competitors: ranked.competitors,
+    lat: d.location?.latitude ?? null,
+    lng: d.location?.longitude ?? null,
   };
 }
 

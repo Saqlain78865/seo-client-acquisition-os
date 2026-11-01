@@ -82,6 +82,10 @@ export const proposalGbpSchema = z.object({
   source: z.string().max(20),
   rankings: z.array(z.object({ query: z.string().max(120), position: z.number().int().positive().nullable(), total: z.number().int().nonnegative() })).max(5),
   issues: z.array(z.object({ severity: z.string().max(20), title: z.string().max(200), fix: z.string().max(400) })).max(15),
+  /** Top Google Maps competitors for the first ranking search (Places API). */
+  competitors: z.array(z.object({ name: z.string().max(120), rating: z.number().min(0).max(5).nullable(), reviewCount: z.number().int().nonnegative(), position: z.number().int().positive() })).max(3).optional(),
+  /** Google Maps ranking grid: positions row by row (null = not in the top 20). */
+  grid: z.object({ query: z.string().max(120), size: z.number().int().min(3).max(7), spacingKm: z.number().positive().max(10), positions: z.array(z.number().int().positive().nullable()).max(49) }).nullable().optional(),
 });
 export type ProposalGbp = z.infer<typeof proposalGbpSchema>;
 

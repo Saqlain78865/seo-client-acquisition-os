@@ -471,6 +471,9 @@ export async function saveGbp(workspaceId: string, userId: string, prospectId: s
       businessStatus: g.businessStatus,
       reviews: g.reviews as object,
       rankings: g.rankings as object,
+      competitors: g.competitors?.length ? (g.competitors as object) : undefined,
+      lat: g.lat ?? null,
+      lng: g.lng ?? null,
     },
   });
   await logActivity({ workspaceId, prospectId, userId, type: "research.gbp_saved", message: `Google Business Profile ${g.source === "PLACES_API" ? "fetched from Google" : "entered by hand"}${g.rating != null ? ` (${g.rating.toFixed(1)}★, ${g.reviewCount ?? 0} reviews)` : ""}` });

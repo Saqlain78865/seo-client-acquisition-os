@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { ChevronLeft, ChevronRight, Download, Plus, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, MapPin, Plus, Users } from "lucide-react";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { listProspects, PROSPECT_SORTS } from "@/lib/prospects";
@@ -74,6 +74,9 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Se
             <a href={`/api/prospects/export${qs({ page: undefined })}`} className={buttonClass("secondary")}>
               <Download className="h-4 w-4" /> Export CSV
             </a>
+            <Link href="/prospects/finder" className={buttonClass("secondary")}>
+              <MapPin className="h-4 w-4" /> Prospect Finder
+            </Link>
             <Link href="/prospects/new" className={buttonClass("primary")}>
               <Plus className="h-4 w-4" /> Add prospect
             </Link>

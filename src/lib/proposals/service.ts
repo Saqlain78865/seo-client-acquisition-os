@@ -10,7 +10,7 @@ import { htmlToPdf } from "./pdf";
 import { pdfFooterTemplate, renderProposalHtml, type RenderVersion } from "./render";
 import { THEME_KEYS } from "./theme";
 import { PAGE_TYPE_LABELS, type PageType } from "../crawler/classify";
-import { gbpIssues, type GbpData } from "../research/gbp";
+import { gbpIssues, type GbpCompetitor, type GbpData } from "../research/gbp";
 import { checksOf, proposalReviews } from "../reputation";
 import {
   ROADMAPS,
@@ -90,7 +90,7 @@ export async function proposalKeywords(workspaceId: string, prospectId: string):
 export async function proposalGbp(prospectId: string, domain: string): Promise<{ gbp: ProposalGbp | null; badReviews: ProposalReview[] }> {
   const row = await db.gbpProfile.findFirst({ where: { prospectId }, orderBy: { fetchedAt: "desc" } });
   if (!row) return { gbp: null, badReviews: [] };
-  const data = { reviews: (row.reviews as GbpData["reviews"]) ?? [], rankings: (row.rankings as GbpData["rankings"]) ?? [] };
+  const data = { reviews: (row.reviews as GbpData["reviews"]) ?? [], rankings: (row.rankings as GbpData["rankings"]) ?? [], competitors: (row.competitors as GbpCompetitor[] | null) ?? [] };
   const g = { ...row, ...data, source: row.source as GbpData["source"] } as GbpData;
   return {
     gbp: {
@@ -103,6 +103,10 @@ export async function proposalGbp(prospectId: string, domain: string): Promise<{
       source: row.source,
       rankings: data.rankings.slice(0, 5).map((r) => ({ query: r.query.slice(0, 120), position: r.position, total: r.total })),
       issues: gbpIssues(g, domain).slice(0, 15).map((i) => ({ severity: i.severity, title: i.title.slice(0, 200), fix: i.fix.slice(0, 400) })),
+      grid: await db.mapsGridScan
+        .findFirst({ where: { prospectId }, orderBy: { createdAt: "desc" } })
+        .then((s) => (s ? { query: s.query.slice(0, 120), size: s.size, spacingKm: s.spacingKm, positions: (s.points as { position: number | null }[]).slice(0, 49).map((p) => p.position) } : null)),
+      competitors: data.competitors.slice(0, 3).map((c) => ({ name: c.name.slice(0, 120), rating: c.rating, reviewCount: c.reviewCount, position: c.position })),
     },
     badReviews: proposalReviews(data.reviews, checksOf(row), 5),
   };

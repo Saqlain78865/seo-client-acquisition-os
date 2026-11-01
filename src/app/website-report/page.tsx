@@ -11,6 +11,7 @@ import { CHANGE_LABELS, monthChanges, type ChangeKind } from "@/lib/site-changes
 import { WORK_CATEGORIES, monthWork, type WorkCategory } from "@/lib/work-log";
 import { insights, type KeywordMove } from "@/lib/report-insights";
 import { PrintButton } from "../work-report/print-button";
+import { readReportLink } from "@/lib/report-delivery";
 
 export const metadata: Metadata = { title: "Monthly SEO report", robots: { index: false } };
 
@@ -120,9 +121,13 @@ function Trend({ series, previous, brand }: { series: { date: string; clicks: nu
  * top searches and pages, opportunities and next month's plan. Everything comes from Search Console,
  * the work log and changes found on the live site — nothing is made up.
  */
-export default async function WebsiteReportPage({ searchParams }: { searchParams: Promise<{ site?: string; month?: string }> }) {
-  const session = await requireSession();
+export default async function WebsiteReportPage({ searchParams }: { searchParams: Promise<{ site?: string; month?: string; k?: string }> }) {
   const sp = await searchParams;
+  // A signed print link (for the emailed PDF) opens exactly one report; otherwise a login is needed.
+  const link = sp.k ? readReportLink(sp.k) : null;
+  if (sp.k && (!link || link.websiteId !== sp.site || link.month !== sp.month)) notFound();
+  const workspaceId = link ? link.workspaceId : (await requireSession()).workspace.id;
+  const session = { workspace: { id: workspaceId } };
   // The last complete month by default: the current month has little or no Search Console data yet.
   const month = isMonthKey(sp.month) ? sp.month : shiftMonth(monthKey(), -1);
   if (!sp.site) notFound();

@@ -305,8 +305,35 @@ function gbpBlock(g: ProposalGbp) {
         <span>${g.hasHours == null ? "—" : g.hasHours ? "Yes" : "No"}<small>opening hours</small></span>
       </div>
     </div>
-    <div class="gbp-detail">${ranks}${issues}</div>
+    <div class="gbp-detail">${ranks}${gridBlock(g)}${competitorBlock(g)}${issues}</div>
   </div>`;
+}
+
+/** The Maps ranking grid as coloured dots: where in the area the business shows up. */
+function gridBlock(g: ProposalGbp) {
+  if (!g.grid) return "";
+  const { size, positions, query, spacingKm } = g.grid;
+  const colour = (p: number | null) => (p == null ? "#94a3b8" : p <= 3 ? "#16a34a" : p <= 10 ? "#f59e0b" : "#dc2626");
+  const top3 = positions.filter((p) => p != null && p <= 3).length;
+  const dots = positions.map((p) => `<span style="background:${colour(p)}">${p ?? "20+"}</span>`).join("");
+  return `<div class="mgrid"><div class="dots" style="grid-template-columns:repeat(${size},7mm)">${dots}</div><p class="small"><b>Google Maps for “${escapeHtml(query)}” across the area:</b> in the top 3 at ${top3} of ${positions.length} points, ${spacingKm} km apart, centred on the business. Green = top 3, amber = 4–10, red = 11–20, grey = not in the top 20.</p></div>`;
+}
+
+/** "Your 18 reviews, their 140": the business against its top Google Maps competitors. */
+function competitorBlock(g: ProposalGbp) {
+  const list = g.competitors ?? [];
+  if (!list.length) return "";
+  const rows = [{ name: g.name, rating: g.rating, reviewCount: g.reviewCount ?? 0, position: g.rankings[0]?.position ?? null, own: true }, ...list.map((c) => ({ ...c, own: false }))];
+  const max = Math.max(...rows.map((r) => r.reviewCount), 1);
+  const avg = Math.round(list.reduce((s, c) => s + c.reviewCount, 0) / list.length);
+  const body = rows
+    .map(
+      (r) =>
+        `<tr${r.own ? ' class="own"' : ""}><td>${escapeHtml(r.name)}${r.own ? " <small>(you)</small>" : ""}</td><td class="num">${r.position == null ? "—" : `#${r.position}`}</td><td class="num">${r.rating == null ? "—" : `${r.rating.toFixed(1)}★`}</td><td><span class="rbar"><i style="width:${Math.max(2, Math.round((r.reviewCount / max) * 100))}%"></i></span> ${r.reviewCount}</td></tr>`,
+    )
+    .join("");
+  const note = avg > (g.reviewCount ?? 0) ? `<p class="small"><b>${g.reviewCount ?? 0} reviews against an average of ${avg}</b> for the businesses Google shows first for “${escapeHtml(g.rankings[0]?.query ?? "")}”.</p>` : "";
+  return `<table class="data compete"><thead><tr><th>Google Maps for “${escapeHtml(g.rankings[0]?.query ?? "")}”</th><th class="num">Position</th><th class="num">Rating</th><th>Reviews</th></tr></thead><tbody>${body}</tbody></table>${note}`;
 }
 
 function reviewCards(reviews: ProposalReview[]) {
@@ -578,6 +605,8 @@ export function renderProposalHtml(v: RenderVersion, client: RenderClient) {
   .gbp-card .cat { text-transform: uppercase; font-size: 7.5pt; letter-spacing: .12em; opacity: .75; margin: 0; } .gbp-card .name { font-size: 13pt; font-weight: 800; margin: 1mm 0 3mm; line-height: 1.25; }
   .gbp-card .rating b { color: #fff; } .gbp-card .count { opacity: .8; font-size: 9pt; }
   .gbp-card .facts { display: flex; gap: 6mm; margin-top: 4mm; } .gbp-card .facts span { font-weight: 800; font-size: 13pt; } .gbp-card small { display: block; font-weight: 400; font-size: 7.5pt; opacity: .75; text-transform: uppercase; letter-spacing: .06em; }
+  .compete tr.own td { font-weight: 700; background: color-mix(in srgb, var(--primary) 8%, transparent); } .compete small { font-weight: 400; color: var(--muted, #64748b); } .rbar { display: inline-block; width: 26mm; height: 2.2mm; border-radius: 2mm; background: #e2e8f0; vertical-align: middle; overflow: hidden; } .rbar i { display: block; height: 100%; background: var(--primary); }
+  .mgrid { display: flex; gap: 4mm; align-items: center; margin: 3mm 0; break-inside: avoid; } .mgrid .dots { display: grid; gap: 1.2mm; flex-shrink: 0; } .mgrid .dots span { width: 7mm; height: 7mm; border-radius: 50%; color: #fff; font-size: 6.5pt; font-weight: 800; display: grid; place-items: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   ul.issues { list-style: none; padding: 0; margin: 2mm 0 0; } ul.issues li { border: 1px solid var(--border); border-left: 4px solid #d97706; border-radius: 10px; padding: 2.5mm 3.5mm; margin-bottom: 2.2mm; break-inside: avoid; }
   ul.issues li.high { border-left-color: #dc2626; } ul.issues b { display: block; color: var(--dark); } ul.issues span { font-size: 9pt; color: #475569; }
   .reviews { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4mm; margin: 3mm 0 5mm; }

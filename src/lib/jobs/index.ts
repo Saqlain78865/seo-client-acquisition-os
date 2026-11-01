@@ -9,7 +9,8 @@ export { JOB_TYPES } from "./handlers";
 const MAINTENANCE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DIGEST_CHECK_MS = 60 * 60 * 1000;
 const CAMPAIGN_TICK_MS = 5 * 60 * 1000;
-const state = globalThis as unknown as { __maintenanceTimer?: NodeJS.Timeout; __digestTimer?: NodeJS.Timeout; __campaignTimer?: NodeJS.Timeout; __reauditTimer?: NodeJS.Timeout; __trackingTimer?: NodeJS.Timeout };
+const MONITOR_TICK_MS = 15 * 60 * 1000;
+const state = globalThis as unknown as { __maintenanceTimer?: NodeJS.Timeout; __digestTimer?: NodeJS.Timeout; __campaignTimer?: NodeJS.Timeout; __reauditTimer?: NodeJS.Timeout; __trackingTimer?: NodeJS.Timeout; __monitorTimer?: NodeJS.Timeout };
 
 /**
  * Starts the in-process job worker if it is not running yet. Called from the authenticated app
@@ -56,6 +57,17 @@ export function ensureWorker() {
     state.__trackingTimer = setInterval(track, DIGEST_CHECK_MS);
     state.__trackingTimer.unref?.();
     setTimeout(track, 240_000).unref?.();
+  }
+  // My Websites: uptime every 15 minutes, daily keyword positions and traffic checks, and monthly report emails on each client's day.
+  if (!state.__monitorTimer && process.env.DISABLE_MAINTENANCE !== "true" && process.env.DISABLE_TRACKING !== "true") {
+    const monitor = () =>
+      Promise.all([import("../site-alerts"), import("../report-delivery")])
+        .then(([alerts, reports]) => Promise.allSettled([alerts.runSiteMonitoring(), reports.runReportSchedules()]))
+        .then((done) => done.forEach((r) => r.status === "rejected" && logger("monitoring").error("monitoring tick failed", { err: r.reason })))
+        .catch((e) => logger("monitoring").error("monitoring tick failed", { err: e }));
+    state.__monitorTimer = setInterval(monitor, MONITOR_TICK_MS);
+    state.__monitorTimer.unref?.();
+    setTimeout(monitor, 150_000).unref?.();
   }
   // Won clients: their website is audited again once a month for the progress report.
   if (!state.__reauditTimer && process.env.DISABLE_MAINTENANCE !== "true" && process.env.DISABLE_REAUDITS !== "true") {

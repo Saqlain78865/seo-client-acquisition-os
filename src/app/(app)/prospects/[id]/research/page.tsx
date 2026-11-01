@@ -15,6 +15,8 @@ import { DOMAIN_SOURCES, type DomainOverview } from "@/lib/research/domain";
 import { getApiKey } from "@/lib/integrations";
 import { defaultGbpQueries, gbpRowToData, latestGbp } from "@/lib/research/service";
 import { GbpPanel } from "./gbp-panel";
+import { MapsGrid } from "./maps-grid";
+import { latestGridScan } from "@/lib/research/places-service";
 
 export const metadata: Metadata = { title: "Research" };
 
@@ -86,6 +88,16 @@ export default async function ResearchPage({ params, searchParams }: { params: P
           placesReady={!!(await getApiKey(session.workspace.id, "PLACES"))}
           defaultQueries={await defaultGbpQueries(session.workspace.id, id)}
         />
+      )}
+      {tab === "gbp" && (
+        <div className="mt-6">
+          <MapsGrid
+            prospectId={id}
+            ready={!!gbpRow?.placeId && !!(await getApiKey(session.workspace.id, "PLACES"))}
+            defaultQuery={(await defaultGbpQueries(session.workspace.id, id))[0] ?? ""}
+            scan={await latestGridScan(session.workspace.id, id).then((s) => (s ? { query: s.query, size: s.size, spacingKm: s.spacingKm, centerLat: s.centerLat, centerLng: s.centerLng, points: s.points, at: s.createdAt.toISOString() } : null))}
+          />
+        </div>
       )}
 
       {tab === "keywords" && (

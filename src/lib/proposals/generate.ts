@@ -106,6 +106,16 @@ export function toProposalFinding(f: SourceFinding, aiExplanation?: string, scre
 }
 
 /** Reputation work is offered when the profile shows a weak rating, few reviews or negative reviews. */
+/** "You have 18 reviews; the top 3 businesses on Google Maps average 140." — from the Places data only. */
+export function competitorLines(name: string, gbp: ProposalGbp): string[] {
+  const list = gbp.competitors ?? [];
+  if (!list.length) return [];
+  const avg = Math.round(list.reduce((s, c) => s + c.reviewCount, 0) / list.length);
+  const mine = gbp.reviewCount ?? 0;
+  if (avg <= mine) return [`${name} already has more reviews than the top ${list.length} businesses Google Maps shows for “${gbp.rankings[0]?.query ?? ""}” (${mine} against an average of ${avg}) — the next step is to turn that into the top spots.`];
+  return [`**${name} has ${mine} Google review${mine === 1 ? "" : "s"}; the top ${list.length} businesses Google Maps shows for “${gbp.rankings[0]?.query ?? ""}” have ${avg} on average** (${list.map((c) => `${c.name}: ${c.reviewCount}`).join(", ")}). Closing that gap is what moves a profile into the map pack.`];
+}
+
 export function needsReputation(gbp: ProposalGbp | null | undefined, badReviews: ProposalReview[] = []) {
   return !!gbp && (badReviews.length > 0 || (gbp.rating != null && gbp.rating < 4.5) || (gbp.reviewCount != null && gbp.reviewCount < 30));
 }
@@ -285,6 +295,7 @@ export function generateSections(input: GenerateInput): SectionDraft[] {
       ? [
           `Your Google Business Profile is often the first thing customers see — before your website. It decides who appears in the Google Maps “map pack” and who gets the call.`,
           gbpLine,
+          ...competitorLines(name, gbp),
           gbp.issues.length
             ? `We found ${gbp.issues.length} thing${gbp.issues.length === 1 ? "" : "s"} to improve on the profile. Fixing them is one of the fastest ways to get more calls${area ? ` from customers in ${area}` : ""}.`
             : "The profile is in reasonable shape — the opportunity now is to outpace competitors with more reviews, photos and activity.",

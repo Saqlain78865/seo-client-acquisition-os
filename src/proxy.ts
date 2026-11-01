@@ -29,6 +29,8 @@ export function proxy(request: NextRequest) {
     return tag(NextResponse.next({ request: { headers } }), id);
   };
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p))) return pass();
+  // The emailed PDF is printed from a signed, short-lived link; the page itself checks the signature.
+  if (pathname === "/website-report" && request.nextUrl.searchParams.has("k")) return pass();
   if (!request.cookies.has(SESSION_COOKIE)) {
     if (pathname.startsWith("/api/")) {
       return tag(NextResponse.json({ error: "Unauthorized" }, { status: 401 }), id);

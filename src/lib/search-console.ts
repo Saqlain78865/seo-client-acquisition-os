@@ -245,6 +245,15 @@ export async function explore(workspaceId: string, websiteId: string, input: Exp
   };
 }
 
+/** A raw Search Analytics query on the website's own property (keyword tracking, alerts). */
+export async function analyticsRows(workspaceId: string, websiteId: string, body: { startDate: string; endDate: string; dimensions: string[]; dimensionFilterGroups?: unknown[]; rowLimit?: number }, fetchImpl: typeof fetch = fetch) {
+  const w = await db.website.findFirst({ where: { id: websiteId, workspaceId }, select: { gscSiteUrl: true, domain: true } });
+  if (!w?.gscSiteUrl || !propertyMatches(w.gscSiteUrl, w.domain)) throw new GscError("Link this website's Search Console property first.");
+  const tok = await token(workspaceId, fetchImpl);
+  const r = await call<{ rows?: ApiRow[] }>(tok, `/sites/${encodeURIComponent(w.gscSiteUrl)}/searchAnalytics/query`, { rowLimit: 25000, dataState: "all", ...body }, fetchImpl);
+  return (r.rows ?? []).map((row) => ({ keys: row.keys ?? [], clicks: row.clicks, impressions: row.impressions, position: row.position }));
+}
+
 /** One calendar month (YYYY-MM) against the month before, for the website's monthly report. */
 export async function monthReport(workspaceId: string, websiteId: string, month: string, fetchImpl: typeof fetch = fetch) {
   const [y, m] = month.split("-").map(Number);

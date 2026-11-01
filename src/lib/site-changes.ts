@@ -121,6 +121,10 @@ export async function checkSiteChanges(workspaceId: string, owner: ChangeOwner) 
     ...changes.filter((c) => c.kind === "REMOVED_PAGE").map((c) => db.pageSnapshot.deleteMany({ where: { ...owner, url: c.url } })),
     "websiteId" in owner ? db.website.update({ where: { id: owner.websiteId }, data: { changesCheckedAt: at } }) : db.prospect.update({ where: { id: owner.prospectId }, data: { changesCheckedAt: at } }),
   ]);
+  if ("websiteId" in owner) {
+    const gone = changes.filter((c) => c.kind === "REMOVED_PAGE" || (c.kind === "STATUS" && Number(c.after) >= 400)).map((c) => ({ url: c.url, status: c.after }));
+    if (gone.length) await (await import("./site-alerts")).pageGoneAlerts(workspaceId, owner.websiteId, gone);
+  }
   return { baseline, changes: changes.length, pages: now.size };
 }
 
