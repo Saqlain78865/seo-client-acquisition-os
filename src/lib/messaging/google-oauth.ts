@@ -1,4 +1,5 @@
 import "server-only";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
  * Google OAuth 2.0 for the official Gmail and Search Console APIs. The OAuth client (Client ID +
@@ -11,6 +12,33 @@ export const GMAIL_SCOPES = ["openid", "email", "https://www.googleapis.com/auth
 export const SEARCH_CONSOLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/webmasters.readonly"];
 export type GoogleClient = { id: string; secret: string };
 export type GooglePurpose = "gmail" | "gsc";
+
+/**
+ * Sign-in state signed with the app's key. In the desktop app Google sign-in runs in the system
+ * browser (Google blocks sign-in inside embedded app windows), where the app's cookies do not
+ * exist — so the state itself carries who started it, and expires after 15 minutes.
+ */
+export type OAuthState = { w: string; u: string; p: GooglePurpose };
+const stateKey = () => createHmac("sha256", process.env.ENCRYPTION_KEY ?? "").update("google-oauth-state").digest();
+
+export function signState(s: OAuthState) {
+  const body = Buffer.from(JSON.stringify({ ...s, e: Date.now() + 15 * 60_000, n: randomBytes(8).toString("hex") })).toString("base64url");
+  return `${body}.${createHmac("sha256", stateKey()).update(body).digest("base64url")}`;
+}
+
+export function readState(state: string): OAuthState | null {
+  const [body, sig] = state.split(".");
+  if (!body || !sig) return null;
+  const want = createHmac("sha256", stateKey()).update(body).digest();
+  const got = Buffer.from(sig, "base64url");
+  if (got.length !== want.length || !timingSafeEqual(got, want)) return null;
+  try {
+    const s = JSON.parse(Buffer.from(body, "base64url").toString()) as OAuthState & { e: number };
+    return s.e > Date.now() && (s.p === "gmail" || s.p === "gsc") ? { w: s.w, u: s.u, p: s.p } : null;
+  } catch {
+    return null;
+  }
+}
 
 /** The OAuth client saved for the workspace, else the one from the environment. */
 export async function googleClient(workspaceId: string): Promise<GoogleClient | null> {

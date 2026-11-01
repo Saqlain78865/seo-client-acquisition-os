@@ -450,6 +450,14 @@ function createWindow(url) {
       shell.openExternal(target);
     }
   });
+  // A redirect out of the app (Google sign-in) also goes to the user's browser: Google refuses
+  // sign-in inside embedded app windows. The app's server finishes the sign-in when Google returns.
+  mainWindow.webContents.on("will-redirect", (e, target) => {
+    if (!inside(target)) {
+      e.preventDefault();
+      shell.openExternal(target);
+    }
+  });
   mainWindow.once("ready-to-show", () => {
     mainWindow.maximize();
     mainWindow.show();

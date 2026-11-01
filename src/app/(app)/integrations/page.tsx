@@ -180,7 +180,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           steps={
             <ol className="list-decimal space-y-1 pl-5">
               <li>Save the Google sign-in app on the left.</li>
-              <li>Press “Connect Search Console” and sign in with the Google account that sees the websites in Search Console.</li>
+              <li>Press “Connect Search Console” and sign in with the Google account that sees the websites in Search Console. In the desktop app the sign-in opens in your web browser — when it says “Connected”, come back here and refresh (F5).</li>
               <li>Clients add your email as a user in their Search Console (Settings → Users and permissions → Restricted is enough).</li>
             </ol>
           }

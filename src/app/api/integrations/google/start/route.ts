@@ -1,12 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { cookies } from "next/headers";
 import { getSession, hasRole } from "@/lib/auth";
-import { randomToken } from "@/lib/crypto";
-import { buildAuthUrl, googleClient, type GooglePurpose } from "@/lib/messaging/google-oauth";
+import { buildAuthUrl, googleClient, signState, type GooglePurpose } from "@/lib/messaging/google-oauth";
 
 /**
- * Starts Google sign-in for Gmail (default) or Search Console (?for=gsc). A random state is kept in
- * an httpOnly cookie with the workspace and purpose, to stop CSRF and mix-ups.
+ * Starts Google sign-in for Gmail (default) or Search Console (?for=gsc). The state is signed and
+ * names the workspace, user and purpose, so the sign-in can finish in the system browser too.
  */
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -15,7 +13,5 @@ export async function GET(request: NextRequest) {
   const client = await googleClient(session.workspace.id);
   if (!client) return NextResponse.redirect(new URL("/integrations?error=google_not_configured", request.url));
   const purpose: GooglePurpose = request.nextUrl.searchParams.get("for") === "gsc" ? "gsc" : "gmail";
-  const state = randomToken(24);
-  (await cookies()).set("google_oauth_state", `${state}.${session.workspace.id}.${purpose}`, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/integrations/google", maxAge: 600 });
-  return NextResponse.redirect(buildAuthUrl(state, client, purpose));
+  return NextResponse.redirect(buildAuthUrl(signState({ w: session.workspace.id, u: session.user.id, p: purpose }), client, purpose));
 }

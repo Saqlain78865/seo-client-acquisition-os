@@ -1,7 +1,7 @@
 {
   "name": "seo-acquisition-os",
   "productName": "LeadLift",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Website audit, proposals and client work for SEO consultants",
   "author": "Saqlain Nazir",
   "main": "main.cjs",
