@@ -47,12 +47,12 @@ export function ensureWorker() {
     state.__campaignTimer.unref?.();
     setTimeout(tick, 120_000).unref?.();
   }
-  // Tracked websites: Search Console totals every day, and a check of the live site for changes every week.
+  // Tracked websites (My Websites and won clients): a check of the live site for changes every week.
   if (!state.__trackingTimer && process.env.DISABLE_MAINTENANCE !== "true" && process.env.DISABLE_TRACKING !== "true") {
     const track = () =>
-      Promise.all([import("../search-console").then((m) => m.runDailySync()), import("../site-changes").then((m) => m.runWeeklyChangeChecks())]).catch((e) =>
-        logger("tracking").error("tracking check failed", { err: e }),
-      );
+      import("../site-changes")
+        .then((m) => m.runWeeklyChangeChecks())
+        .catch((e) => logger("tracking").error("tracking check failed", { err: e }));
     state.__trackingTimer = setInterval(track, DIGEST_CHECK_MS);
     state.__trackingTimer.unref?.();
     setTimeout(track, 240_000).unref?.();

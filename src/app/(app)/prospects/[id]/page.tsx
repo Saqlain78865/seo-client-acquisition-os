@@ -18,7 +18,6 @@ import { DangerZone } from "./danger-zone";
 import { OptOut } from "./opt-out";
 import { KickoffChecklist } from "./kickoff";
 import { TrackingCard } from "./tracking-card";
-import { totals } from "@/lib/search-console";
 import { CHANGE_LABELS, type ChangeKind } from "@/lib/site-changes";
 import { createProposalAction } from "../../proposals/actions";
 
@@ -42,15 +41,11 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
   const likelyDuplicates = mergeCandidates.filter((c) => c.domain === p.domain);
   const latestAudit = p.audits.find((a) => a.status === "COMPLETED" || a.status === "PARTIAL");
   const kickoff = await db.kickoffTask.findMany({ where: { prospectId: p.id, workspaceId: session.workspace.id }, orderBy: { sortOrder: "asc" } });
-  // Search Console totals (last 28 synced days against the 28 before) and the latest website changes.
-  const [gscConn, track, gscDays, changes] = await Promise.all([
-    db.integrationConnection.findFirst({ where: { workspaceId: session.workspace.id, provider: "SEARCH_CONSOLE", status: "CONNECTED", encryptedSecret: { not: null } }, select: { id: true } }),
-    db.prospect.findUniqueOrThrow({ where: { id: p.id }, select: { gscSiteUrl: true, gscSyncedAt: true, changesCheckedAt: true } }),
-    db.gscDaily.findMany({ where: { prospectId: p.id }, orderBy: { date: "desc" }, take: 56 }),
+  // The won client's website change log (Search Console lives in My Websites).
+  const [track, changes] = await Promise.all([
+    db.prospect.findUniqueOrThrow({ where: { id: p.id }, select: { changesCheckedAt: true } }),
     db.siteChange.findMany({ where: { prospectId: p.id, workspaceId: session.workspace.id }, orderBy: { detectedAt: "desc" }, take: 30 }),
   ]);
-  const last28 = gscDays.slice(0, 28);
-  const prev28 = gscDays.slice(28, 56);
 
   return (
     <>
@@ -124,18 +119,14 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
             <OptOut prospectId={p.id} on={p.doNotContact} reason={p.doNotContactReason} />
           </div>
           <ContactsPanel prospectId={p.id} contacts={p.contacts} />
-          <TrackingCard
-            prospectId={p.id}
-            gscConnected={!!gscConn}
-            siteUrl={track.gscSiteUrl}
-            syncedAt={track.gscSyncedAt?.toISOString() ?? null}
-            last28={last28.length ? totals(last28) : null}
-            prev28={prev28.length >= 20 ? totals(prev28) : null}
-            spark={[...last28].reverse().map((d) => d.clicks)}
-            checkedAt={track.changesCheckedAt?.toISOString() ?? null}
-            tracked={p.status === "WON" || !!track.gscSiteUrl}
-            changes={changes.map((c) => ({ id: c.id, url: c.url, label: CHANGE_LABELS[c.kind as ChangeKind] ?? c.kind, before: c.before, after: c.after, at: c.detectedAt.toISOString() }))}
-          />
+          {(p.status === "WON" || changes.length > 0) && (
+            <TrackingCard
+              prospectId={p.id}
+              checkedAt={track.changesCheckedAt?.toISOString() ?? null}
+              tracked={p.status === "WON"}
+              changes={changes.map((c) => ({ id: c.id, url: c.url, label: CHANGE_LABELS[c.kind as ChangeKind] ?? c.kind, before: c.before, after: c.after, at: c.detectedAt.toISOString() }))}
+            />
+          )}
 
           <div className="grid gap-6 md:grid-cols-2">
             <Card>

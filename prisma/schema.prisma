@@ -94,6 +94,7 @@ model Workspace {
   auditBatches     AuditBatch[]
   gbpProfiles      GbpProfile[]
   reviewScreenshots ReviewScreenshot[]
+  websites          Website[]
   kickoffTasks     KickoffTask[]
   clientTasks      ClientTask[]
   campaigns        Campaign[]
@@ -1148,7 +1149,9 @@ model GscDaily {
 /// The last seen state of one page of a tracked website, compared on every weekly check.
 model PageSnapshot {
   id              String   @id @default(cuid())
-  prospectId      String
+  // Exactly one of prospectId (won client) or websiteId (My Websites) is set.
+  prospectId      String?
+  websiteId       String?
   url             String
   status          Int?
   title           String?
@@ -1160,23 +1163,49 @@ model PageSnapshot {
   contentHash     String?
   takenAt         DateTime @default(now())
 
-  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospect Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  website  Website?  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@unique([prospectId, url])
+  @@unique([websiteId, url])
 }
 
 /// A change found on a tracked website: NEW_PAGE | REMOVED_PAGE | TITLE | META_DESCRIPTION | H1 | CONTENT | STATUS | CANONICAL | INDEXING
 model SiteChange {
   id          String   @id @default(cuid())
   workspaceId String
-  prospectId  String
+  prospectId  String?
+  websiteId   String?
   url         String
   kind        String
   before      String?
   after       String?
   detectedAt  DateTime @default(now())
 
-  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospect Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  website  Website?  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@index([prospectId, detectedAt])
+  @@index([websiteId, detectedAt])
+}
+
+/// A website you run or manage (your blog, your own sites, sites clients gave you access to) — separate from prospects.
+model Website {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  name             String
+  url              String
+  domain           String
+  // OWN | CLIENT
+  kind             String    @default("OWN")
+  // The Search Console property of this website only (its domain property or a URL prefix on its host).
+  gscSiteUrl       String?
+  changesCheckedAt DateTime?
+  createdAt        DateTime  @default(now())
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pageSnapshots PageSnapshot[]
+  siteChanges   SiteChange[]
+
+  @@unique([workspaceId, domain])
 }

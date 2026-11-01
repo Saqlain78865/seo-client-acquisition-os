@@ -5,65 +5,75 @@ import { db } from "@/lib/db";
 import { createWorkspace } from "@/lib/workspace";
 import { createProspect } from "@/lib/prospects";
 import { saveCredentials } from "@/lib/integrations";
-import { GscError, linkSite, listSites, matchSite, monthResults, syncProspect, totals } from "@/lib/search-console";
+import { createWebsite, WebsiteError } from "@/lib/websites";
+import { GscError, explore, linkWebsite, listSites, matchSite, monthReport, previousOf, propertyMatches, rangeFor, totals } from "@/lib/search-console";
 import { checkSiteChanges, compare, monthChanges } from "@/lib/site-changes";
 import { runnerOptions } from "@/lib/audit/runner";
 
-async function setup(name: string, websiteUrl = `${name}${Date.now()}.example`) {
+async function workspace(name: string) {
   const user = await db.user.create({ data: { email: `${name}${Date.now()}${Math.random().toString(36).slice(2, 6)}@test.example`, name, passwordHash: "x" } });
   const ws = await createWorkspace(`${name} WS`, user.id);
-  const p = await createProspect(ws.id, user.id, { businessName: "Sky Balloons", websiteUrl, currency: "AED" });
-  return { userId: user.id, workspaceId: ws.id, prospect: p };
+  return { userId: user.id, workspaceId: ws.id };
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-describe("Search Console (read-only)", () => {
-  it("lists properties, links the matching one, syncs daily totals and compares months", async () => {
-    const { userId, workspaceId, prospect } = await setup("gsc", "skyballoons.example");
+describe("My Websites + Search Console (read-only)", () => {
+  it("only accepts a website's own property", () => {
+    expect(propertyMatches("sc-domain:skyballoons.example", "skyballoons.example")).toBe(true);
+    expect(propertyMatches("https://www.skyballoons.example/", "skyballoons.example")).toBe(true);
+    expect(propertyMatches("https://blog.skyballoons.example/", "skyballoons.example")).toBe(false);
+    expect(propertyMatches("sc-domain:other.example", "skyballoons.example")).toBe(false);
+    expect(matchSite([{ siteUrl: "https://skyballoons.example/", permissionLevel: "siteOwner" }, { siteUrl: "sc-domain:skyballoons.example", permissionLevel: "siteOwner" }], "skyballoons.example")).toBe("sc-domain:skyballoons.example");
+  });
+
+  it("works out date ranges and the previous period", () => {
+    const r = rangeFor({ days: 7 }, new Date("2026-11-10T12:00:00Z"));
+    expect(r).toEqual({ start: "2026-11-02", end: "2026-11-08" });
+    expect(previousOf(r)).toEqual({ start: "2026-10-26", end: "2026-11-01" });
+    expect(totals([])).toEqual({ clicks: 0, impressions: 0, ctr: 0, position: 0 });
+  });
+
+  it("links the website's own property and explores queries with the previous period", async () => {
+    const { userId, workspaceId } = await workspace("gsc");
+    await expect(createWebsite(workspaceId, userId, { name: "Sky", url: "nodot", kind: "OWN" })).rejects.toThrow(WebsiteError);
+    const site = await createWebsite(workspaceId, userId, { name: "Sky Balloons", url: "https://www.skyballoons.example/tours", kind: "OWN" });
+    expect(site).toMatchObject({ domain: "skyballoons.example", url: "https://www.skyballoons.example/" });
+    await expect(createWebsite(workspaceId, userId, { name: "Again", url: "skyballoons.example", kind: "CLIENT" })).rejects.toThrow(/already/);
+
     await expect(listSites(workspaceId)).rejects.toThrow(GscError);
     await saveCredentials(workspaceId, "GOOGLE_OAUTH_APP", { secret: { clientId: "1-abc.apps.googleusercontent.com", clientSecret: "GOCSPX-test" } });
     await saveCredentials(workspaceId, "SEARCH_CONSOLE", { secret: { refreshToken: "refresh-1" }, accountLabel: "me@example.com" });
 
-    const calls: string[] = [];
+    const bodies: { dimensions: string[]; startDate: string; endDate: string; dimensionFilterGroups?: unknown }[] = [];
     const fake = (async (url: string, init?: RequestInit) => {
-      calls.push(url);
-      if (url.startsWith("https://oauth2.googleapis.com/token")) {
-        expect(String(init?.body)).toContain("client_secret=GOCSPX-test");
-        return json({ access_token: "tok", expires_in: 3600 });
-      }
-      if (url.endsWith("/sites")) return json({ siteEntry: [{ siteUrl: "sc-domain:skyballoons.example", permissionLevel: "siteOwner" }, { siteUrl: "https://other.example/", permissionLevel: "siteUnverifiedUser" }] });
-      const body = JSON.parse(String(init?.body ?? "{}")) as { dimensions: string[]; startDate: string };
-      if (body.dimensions[0] === "date") {
-        const rows = Array.from({ length: 60 }, (_, i) => {
-          const d = new Date(Date.UTC(2026, 8, 1) + i * 86400_000).toISOString().slice(0, 10);
-          return { keys: [d], clicks: d.startsWith("2026-10") ? 20 : 10, impressions: 400, ctr: 0.05, position: d.startsWith("2026-10") ? 8 : 12 };
-        });
-        return json({ rows });
-      }
-      const oct = body.startDate === "2026-10-01";
-      return json({ rows: body.dimensions[0] === "query" ? [{ keys: ["balloon ride dubai"], clicks: oct ? 90 : 40, impressions: 900, ctr: 0.1, position: oct ? 4.2 : 9.1 }] : [{ keys: ["https://skyballoons.example/"], clicks: oct ? 120 : 80, impressions: 2000, ctr: 0.06, position: 6 }] });
+      if (url.startsWith("https://oauth2.googleapis.com/token")) return json({ access_token: "tok", expires_in: 3600 });
+      if (url.endsWith("/sites")) return json({ siteEntry: [{ siteUrl: "sc-domain:skyballoons.example", permissionLevel: "siteOwner" }, { siteUrl: "sc-domain:other.example", permissionLevel: "siteOwner" }] });
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      bodies.push(body);
+      expect(init?.method).toBe("POST");
+      const current = body.startDate === "2026-10-01";
+      if (body.dimensions[0] === "date") return json({ rows: [{ keys: [body.startDate], clicks: current ? 30 : 10, impressions: 600, ctr: 0.05, position: current ? 6 : 9 }] });
+      return json({ rows: [{ keys: ["balloon ride dubai"], clicks: current ? 25 : 8, impressions: 300, ctr: 0.08, position: current ? 4.1 : 8.5 }, ...(current ? [{ keys: ["sunrise balloon"], clicks: 5, impressions: 90, ctr: 0.05, position: 7 }] : [])] });
     }) as unknown as typeof fetch;
 
-    const sites = await listSites(workspaceId, fake);
-    expect(sites.map((s) => s.siteUrl)).toEqual(["sc-domain:skyballoons.example"]);
-    expect(matchSite(sites, "www.skyballoons.example")).toBe("sc-domain:skyballoons.example");
-    await expect(linkSite(workspaceId, userId, prospect.id, "https://not-mine.example/", fake)).rejects.toThrow(/cannot see/);
-    expect(await linkSite(workspaceId, userId, prospect.id, "sc-domain:skyballoons.example", fake)).toBe(60);
-    expect(await db.gscDaily.count({ where: { prospectId: prospect.id } })).toBe(60);
-    // A second sync replaces the recent days instead of adding duplicates.
-    await syncProspect(workspaceId, prospect.id, fake);
-    expect(await db.gscDaily.count({ where: { prospectId: prospect.id } })).toBe(60);
+    // Another website's property is refused, even though the account can see it.
+    await expect(linkWebsite(workspaceId, userId, site.id, "sc-domain:other.example", fake)).rejects.toThrow(/not a property of skyballoons.example/);
+    await expect(explore(workspaceId, site.id, { dimension: "query" }, fake)).rejects.toThrow(/Link this website/);
+    await linkWebsite(workspaceId, userId, site.id, "sc-domain:skyballoons.example", fake);
 
-    const r = (await monthResults(workspaceId, prospect.id, "2026-10", fake))!;
-    expect(r.current.clicks).toBe(20 * 30);
-    expect(r.previous.clicks).toBe(10 * 30);
-    expect(r.current.position).toBeCloseTo(8);
-    expect(r.queries[0]).toMatchObject({ key: "balloon ride dubai", clicks: 90, previousClicks: 40, previousPosition: 9.1 });
-    expect(r.detailError).toBeNull();
-    // Only read calls: nothing is ever written to Search Console.
-    expect(calls.every((u) => u.includes("oauth2") || u.includes("/sites") || u.includes("searchAnalytics/query"))).toBe(true);
-    expect(totals([])).toEqual({ clicks: 0, impressions: 0, ctr: 0, position: 0 });
+    const r = await explore(workspaceId, site.id, { start: "2026-10-01", end: "2026-10-31", compare: true, dimension: "query", search: "balloon" }, fake);
+    expect(r.previousRange).toEqual({ start: "2026-08-31", end: "2026-09-30" });
+    expect(r.totals.clicks).toBe(30);
+    expect(r.previousTotals?.clicks).toBe(10);
+    expect(r.rows[0]).toMatchObject({ key: "balloon ride dubai", clicks: 25, previous: { clicks: 8, position: 8.5 } });
+    expect(r.rows[1]).toMatchObject({ key: "sunrise balloon", previous: null });
+    expect(bodies.some((b) => JSON.stringify(b.dimensionFilterGroups ?? "").includes('"operator":"contains","expression":"balloon"'))).toBe(true);
+
+    // The monthly report compares with the previous calendar month.
+    const m = await monthReport(workspaceId, site.id, "2026-10", fake);
+    expect(m.queries.previousRange).toEqual({ start: "2026-09-01", end: "2026-09-30" });
+    expect(m.queries.totals.clicks).toBe(30);
   });
 });
 
@@ -87,31 +97,32 @@ describe("website change log", () => {
     server.close();
   });
 
-  it("records a baseline, then reports new, changed and removed pages", async () => {
+  it("records a baseline, then reports new, changed and removed pages — for My Websites and won clients alike", async () => {
     const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");
     pages["/"] = page("Sky Balloons", `<h1>Balloon rides</h1><p>${words(200)}</p><a href="/tours">Tours</a><a href="/old">Old</a>`);
     pages["/tours"] = page("Tours", `<h1>Tours</h1><p>${words(150)}</p>`);
     pages["/old"] = page("Old offer", `<h1>Old</h1><p>${words(80)}</p>`);
-    const { workspaceId, prospect } = await setup("chg", `${base}/`);
+    const { userId, workspaceId } = await workspace("chg");
+    const site = await db.website.create({ data: { workspaceId, name: "Local", url: `${base}/`, domain: "127.0.0.1" } });
+    const client = await createProspect(workspaceId, userId, { businessName: "Client", websiteUrl: `${base}/`, currency: "USD" });
 
-    expect(await checkSiteChanges(workspaceId, prospect.id)).toMatchObject({ baseline: true, changes: 0, pages: 3 });
+    expect(await checkSiteChanges(workspaceId, { websiteId: site.id })).toMatchObject({ baseline: true, changes: 0, pages: 3 });
+    expect((await checkSiteChanges(workspaceId, { prospectId: client.id })).baseline).toBe(true);
 
     pages["/"] = page("Hot Air Balloon Rides in Dubai | Sky Balloons", `<h1>Balloon rides</h1><p>${words(200)}</p><a href="/tours">Tours</a><a href="/faq">FAQ</a>`, "Sunrise flights over the desert.");
     pages["/tours"] = page("Tours", `<h1>Sunrise balloon tours</h1><p>${words(400)}</p>`);
     pages["/faq"] = page("FAQ", `<h1>FAQ</h1><p>${words(120)}</p>`);
     delete pages["/old"];
 
-    const r = await checkSiteChanges(workspaceId, prospect.id);
-    expect(r.baseline).toBe(false);
-    const found = await db.siteChange.findMany({ where: { prospectId: prospect.id } });
-    const kinds = found.map((c) => `${c.kind} ${new URL(c.url).pathname}`).sort();
-    expect(kinds).toEqual(["CONTENT /tours", "H1 /tours", "META_DESCRIPTION /", "NEW_PAGE /faq", "REMOVED_PAGE /old", "TITLE /"]);
+    await checkSiteChanges(workspaceId, { websiteId: site.id });
+    const found = await db.siteChange.findMany({ where: { websiteId: site.id } });
+    expect(found.map((c) => `${c.kind} ${new URL(c.url).pathname}`).sort()).toEqual(["CONTENT /tours", "H1 /tours", "META_DESCRIPTION /", "NEW_PAGE /faq", "REMOVED_PAGE /old", "TITLE /"]);
     expect(found.find((c) => c.kind === "TITLE")).toMatchObject({ before: "Sky Balloons", after: "Hot Air Balloon Rides in Dubai | Sky Balloons" });
     const month = new Date().toISOString().slice(0, 7);
-    expect((await monthChanges(workspaceId, prospect.id, month)).length).toBe(6);
-
-    // Nothing changed: nothing new is recorded.
-    expect((await checkSiteChanges(workspaceId, prospect.id)).changes).toBe(0);
+    expect((await monthChanges(workspaceId, { websiteId: site.id }, month)).length).toBe(6);
+    // The website and the prospect keep separate logs.
+    expect(await db.siteChange.count({ where: { prospectId: client.id } })).toBe(0);
+    expect((await checkSiteChanges(workspaceId, { websiteId: site.id })).changes).toBe(0);
   }, 120_000);
 
   it("ignores tiny text edits but reports real content changes", () => {

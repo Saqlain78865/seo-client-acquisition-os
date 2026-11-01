@@ -7,7 +7,7 @@ import { runnerOptions } from "./audit/runner";
 import { isGbpLink } from "./research/gbp-link";
 
 /**
- * Change log for websites we work on: every week the public site is crawled and each page is
+ * Change log for websites we work on (My Websites and won clients): every week the public site is crawled and each page is
  * compared with what was seen last time — new and removed pages, titles, descriptions, headings,
  * content, status codes, canonicals and noindex. No login to the website is needed.
  */
@@ -68,18 +68,31 @@ export function compare(before: Snap, after: Snap): { kind: ChangeKind; before: 
   return out;
 }
 
-/** Crawls the website, records what changed since the last check, and keeps the new snapshots. */
-export async function checkSiteChanges(workspaceId: string, prospectId: string) {
-  const p = await db.prospect.findFirst({ where: { id: prospectId, workspaceId }, select: { websiteUrl: true } });
+/** Whose website is checked: a won client (prospect) or one of My Websites. */
+export type ChangeOwner = { prospectId: string } | { websiteId: string };
+
+async function ownerSite(workspaceId: string, owner: ChangeOwner) {
+  if ("websiteId" in owner) {
+    const w = await db.website.findFirst({ where: { id: owner.websiteId, workspaceId }, select: { url: true } });
+    if (!w) throw new Error("Website not found.");
+    return w.url;
+  }
+  const p = await db.prospect.findFirst({ where: { id: owner.prospectId, workspaceId }, select: { websiteUrl: true } });
   if (!p) throw new Error("Prospect not found.");
-  if (isGbpLink(p.websiteUrl)) return { baseline: false, changes: 0, pages: 0 };
-  const result = await crawlSite(p.websiteUrl, { allowPrivateNetworks: runnerOptions.allowPrivateNetworks, pageLimit: PAGE_LIMIT, delayMs: 800 });
+  return p.websiteUrl;
+}
+
+/** Crawls the website, records what changed since the last check, and keeps the new snapshots. */
+export async function checkSiteChanges(workspaceId: string, owner: ChangeOwner) {
+  const siteUrl = await ownerSite(workspaceId, owner);
+  if (isGbpLink(siteUrl)) return { baseline: false, changes: 0, pages: 0 };
+  const result = await crawlSite(siteUrl, { allowPrivateNetworks: runnerOptions.allowPrivateNetworks, pageLimit: PAGE_LIMIT, delayMs: 800 });
   const now = new Map<string, Snap>();
   for (const r of result.pages) {
     const s = snapshotOf(r);
     if (s && !now.has(s.url)) now.set(s.url, s);
   }
-  const old = new Map((await db.pageSnapshot.findMany({ where: { prospectId } })).map((s) => [s.url, s as Snap]));
+  const old = new Map((await db.pageSnapshot.findMany({ where: owner })).map((s) => [s.url, s as Snap]));
   const baseline = old.size === 0;
   const changes: { url: string; kind: ChangeKind; before: string | null; after: string | null }[] = [];
   if (!baseline) {
@@ -95,45 +108,53 @@ export async function checkSiteChanges(workspaceId: string, prospectId: string) 
       if (r && (r.status === 404 || r.status === 410)) changes.push({ url, kind: "REMOVED_PAGE", before: old.get(url)!.title, after: String(r.status) });
     }
   }
+  const at = new Date();
   await db.$transaction([
-    ...(changes.length ? [db.siteChange.createMany({ data: changes.map((c) => ({ workspaceId, prospectId, url: c.url, kind: c.kind, before: c.before?.slice(0, 500) ?? null, after: c.after?.slice(0, 500) ?? null })) })] : []),
+    ...(changes.length ? [db.siteChange.createMany({ data: changes.map((c) => ({ workspaceId, ...owner, url: c.url, kind: c.kind, before: c.before?.slice(0, 500) ?? null, after: c.after?.slice(0, 500) ?? null })) })] : []),
     ...[...now.values()].map((s) =>
-      db.pageSnapshot.upsert({ where: { prospectId_url: { prospectId, url: s.url } }, create: { prospectId, ...s, takenAt: new Date() }, update: { ...s, takenAt: new Date() } }),
+      db.pageSnapshot.upsert({
+        where: "websiteId" in owner ? { websiteId_url: { websiteId: owner.websiteId, url: s.url } } : { prospectId_url: { prospectId: owner.prospectId, url: s.url } },
+        create: { ...owner, ...s, takenAt: at },
+        update: { ...s, takenAt: at },
+      }),
     ),
-    ...changes.filter((c) => c.kind === "REMOVED_PAGE").map((c) => db.pageSnapshot.deleteMany({ where: { prospectId, url: c.url } })),
-    db.prospect.update({ where: { id: prospectId }, data: { changesCheckedAt: new Date() } }),
+    ...changes.filter((c) => c.kind === "REMOVED_PAGE").map((c) => db.pageSnapshot.deleteMany({ where: { ...owner, url: c.url } })),
+    "websiteId" in owner ? db.website.update({ where: { id: owner.websiteId }, data: { changesCheckedAt: at } }) : db.prospect.update({ where: { id: owner.prospectId }, data: { changesCheckedAt: at } }),
   ]);
   return { baseline, changes: changes.length, pages: now.size };
 }
 
 /**
- * Weekly checks for the websites being worked on: won clients and every website linked to Search
- * Console (your own blog included). A few per run, so the app stays responsive.
+ * Weekly checks for the websites being worked on: My Websites and won clients. A few per run, so
+ * the app stays responsive.
  */
 export async function runWeeklyChangeChecks(now = new Date()) {
-  const due = await db.prospect.findMany({
-    where: {
-      OR: [{ status: "WON" }, { gscSiteUrl: { not: null } }],
-      AND: [{ OR: [{ changesCheckedAt: null }, { changesCheckedAt: { lt: new Date(now.getTime() - 7 * DAY) } }] }],
-    },
-    select: { id: true, workspaceId: true },
-    take: 2,
-  });
-  for (const p of due) {
-    await checkSiteChanges(p.workspaceId, p.id).catch(async (e) => {
-      log.warn("change check failed", { prospectId: p.id, reason: (e as Error).message });
+  const stale = { OR: [{ changesCheckedAt: null }, { changesCheckedAt: { lt: new Date(now.getTime() - 7 * DAY) } }] };
+  const [websites, clients] = await Promise.all([
+    db.website.findMany({ where: stale, select: { id: true, workspaceId: true }, take: 2 }),
+    db.prospect.findMany({ where: { status: "WON", ...stale }, select: { id: true, workspaceId: true }, take: 2 }),
+  ]);
+  const due: { workspaceId: string; owner: ChangeOwner }[] = [
+    ...websites.map((w) => ({ workspaceId: w.workspaceId, owner: { websiteId: w.id } })),
+    ...clients.map((p) => ({ workspaceId: p.workspaceId, owner: { prospectId: p.id } })),
+  ].slice(0, 2);
+  for (const d of due) {
+    await checkSiteChanges(d.workspaceId, d.owner).catch(async (e) => {
+      log.warn("change check failed", { ...d.owner, reason: (e as Error).message });
       // Try again tomorrow rather than every hour.
-      await db.prospect.update({ where: { id: p.id }, data: { changesCheckedAt: new Date(now.getTime() - 6 * DAY) } });
+      const retry = { changesCheckedAt: new Date(now.getTime() - 6 * DAY) };
+      if ("websiteId" in d.owner) await db.website.update({ where: { id: d.owner.websiteId }, data: retry });
+      else await db.prospect.update({ where: { id: d.owner.prospectId }, data: retry });
     });
   }
   return due.length;
 }
 
 /** Changes found in one month (YYYY-MM), newest first. */
-export async function monthChanges(workspaceId: string, prospectId: string, month: string) {
+export async function monthChanges(workspaceId: string, owner: ChangeOwner, month: string) {
   const [y, m] = month.split("-").map(Number);
   return db.siteChange.findMany({
-    where: { workspaceId, prospectId, detectedAt: { gte: new Date(Date.UTC(y, m - 1, 1)), lt: new Date(Date.UTC(y, m, 1)) } },
+    where: { workspaceId, ...owner, detectedAt: { gte: new Date(Date.UTC(y, m - 1, 1)), lt: new Date(Date.UTC(y, m, 1)) } },
     orderBy: { detectedAt: "desc" },
     take: 300,
   });

@@ -5,6 +5,7 @@ import {
   Briefcase,
   FileSearch,
   FileText,
+  Globe2,
   KanbanSquare,
   Layers,
   LayoutDashboard,
@@ -31,6 +32,7 @@ export const NAV_GROUPS = [
       { href: "/campaigns", label: "Auto-send", icon: CalendarClock },
       { href: "/deals", label: "Clients and Deals", icon: Briefcase },
       { href: "/work", label: "Client Work", icon: KanbanSquare },
+      { href: "/websites", label: "My Websites", icon: Globe2 },
     ],
   },
   {

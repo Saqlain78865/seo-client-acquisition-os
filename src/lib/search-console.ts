@@ -1,25 +1,25 @@
 import "server-only";
 import { db } from "./db";
 import { logActivity } from "./activity";
-import { logger } from "./log";
 import { getCredentials } from "./integrations";
 import { GoogleAuthError, accessTokenFor } from "./messaging/google-oauth";
 
 /**
- * Google Search Console, read-only: the properties the connected Google account can see, daily
- * totals for each linked website (synced every day), and month-against-month results for the
- * client report. Nothing is ever written to Search Console.
+ * Google Search Console, read-only, for My Websites. Each website can only be linked to its own
+ * property (its domain property or a URL prefix on its own host), so one site never shows another
+ * site's data. Reports are read live from Search Console; nothing is ever written to it.
  */
 
 const API = "https://www.googleapis.com/webmasters/v3";
 const DAY = 86400_000;
-const log = logger("search-console");
 
 export class GscError extends Error {}
 
 export type GscSite = { siteUrl: string; permissionLevel: string };
 export type GscTotals = { clicks: number; impressions: number; ctr: number; position: number };
 export type GscRow = { key: string; clicks: number; impressions: number; ctr: number; position: number };
+export type Dimension = "query" | "page" | "country" | "device" | "searchAppearance";
+export const DIMENSIONS: Dimension[] = ["query", "page", "country", "device", "searchAppearance"];
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -55,63 +55,40 @@ export async function listSites(workspaceId: string, fetchImpl: typeof fetch = f
   return (r.siteEntry ?? []).filter((s) => s.permissionLevel !== "siteUnverifiedUser").sort((a, b) => a.siteUrl.localeCompare(b.siteUrl));
 }
 
-/** The property that belongs to a website: the domain property first, then its https/http URL prefixes. */
+const bare = (host: string) => host.toLowerCase().replace(/^www\./, "");
+
+/** True when a property belongs to this website: its domain property, or a URL prefix on its own host (with or without www). */
+export function propertyMatches(siteUrl: string, domain: string) {
+  const d = bare(domain);
+  if (siteUrl.startsWith("sc-domain:")) return bare(siteUrl.slice("sc-domain:".length)) === d;
+  try {
+    return bare(new URL(siteUrl).hostname) === d;
+  } catch {
+    return false;
+  }
+}
+
+/** The best property for a website: the domain property first, then https, then http prefixes. */
 export function matchSite(sites: GscSite[], domain: string): string | null {
-  const d = domain.replace(/^www\./, "").toLowerCase();
-  const wanted = [`sc-domain:${d}`, `https://www.${d}/`, `https://${d}/`, `http://www.${d}/`, `http://${d}/`];
-  for (const w of wanted) if (sites.some((s) => s.siteUrl.toLowerCase() === w)) return sites.find((s) => s.siteUrl.toLowerCase() === w)!.siteUrl;
-  return null;
+  const own = sites.filter((s) => propertyMatches(s.siteUrl, domain));
+  const rank = (u: string) => (u.startsWith("sc-domain:") ? 0 : u.startsWith("https://") ? 1 : 2);
+  return own.sort((a, b) => rank(a.siteUrl) - rank(b.siteUrl))[0]?.siteUrl ?? null;
 }
 
-async function searchAnalytics(tok: string, siteUrl: string, body: Record<string, unknown>, fetchImpl: typeof fetch) {
-  const r = await call<{ rows?: { keys?: string[]; clicks: number; impressions: number; ctr: number; position: number }[] }>(tok, `/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, body, fetchImpl);
-  return (r.rows ?? []).map((x) => ({ key: x.keys?.[0] ?? "", clicks: x.clicks, impressions: x.impressions, ctr: x.ctr, position: x.position }));
-}
-
-/** Links a property to the website; it must be one the connected account can read. */
-export async function linkSite(workspaceId: string, userId: string, prospectId: string, siteUrl: string | null, fetchImpl: typeof fetch = fetch) {
-  const prospect = await db.prospect.findFirst({ where: { id: prospectId, workspaceId } });
-  if (!prospect) throw new GscError("Prospect not found.");
+/** Links (or unlinks) a website's own Search Console property. */
+export async function linkWebsite(workspaceId: string, userId: string, websiteId: string, siteUrl: string | null, fetchImpl: typeof fetch = fetch) {
+  const w = await db.website.findFirst({ where: { id: websiteId, workspaceId } });
+  if (!w) throw new GscError("Website not found.");
   if (siteUrl) {
+    if (!propertyMatches(siteUrl, w.domain)) throw new GscError(`${siteUrl} is not a property of ${w.domain}. Only this website's own property can be linked.`);
     const sites = await listSites(workspaceId, fetchImpl);
-    if (!sites.some((s) => s.siteUrl === siteUrl)) throw new GscError("This Google account cannot see that Search Console property.");
+    if (!sites.some((s) => s.siteUrl === siteUrl)) throw new GscError("The connected Google account cannot see that Search Console property.");
   }
-  await db.prospect.update({ where: { id: prospectId }, data: { gscSiteUrl: siteUrl, gscSyncedAt: null } });
-  if (!siteUrl) await db.gscDaily.deleteMany({ where: { prospectId } });
-  await logActivity({ workspaceId, prospectId, userId, type: "gsc.linked", message: siteUrl ? `Search Console property linked: ${siteUrl}` : "Search Console property unlinked" });
-  return siteUrl ? syncProspect(workspaceId, prospectId, fetchImpl) : 0;
+  await db.website.update({ where: { id: websiteId }, data: { gscSiteUrl: siteUrl } });
+  await logActivity({ workspaceId, userId, type: "gsc.linked", message: siteUrl ? `Search Console property linked to ${w.domain}: ${siteUrl}` : `Search Console unlinked from ${w.domain}` });
 }
 
-/** Daily totals: the last 16 months on the first sync, then the last 10 days (Google revises recent days). */
-export async function syncProspect(workspaceId: string, prospectId: string, fetchImpl: typeof fetch = fetch) {
-  const p = await db.prospect.findFirst({ where: { id: prospectId, workspaceId }, select: { gscSiteUrl: true, gscSyncedAt: true } });
-  if (!p?.gscSiteUrl) throw new GscError("Link a Search Console property first.");
-  const tok = await token(workspaceId, fetchImpl);
-  const end = new Date(Date.now() - DAY);
-  const start = new Date(end.getTime() - (p.gscSyncedAt ? 10 : 480) * DAY);
-  const rows = (await searchAnalytics(tok, p.gscSiteUrl, { startDate: ymd(start), endDate: ymd(end), dimensions: ["date"], rowLimit: 25000 }, fetchImpl)).filter((r) => r.key >= ymd(start) && r.key <= ymd(end));
-  await db.$transaction([
-    db.gscDaily.deleteMany({ where: { prospectId, date: { gte: ymd(start), lte: ymd(end) } } }),
-    db.gscDaily.createMany({ data: rows.map((r) => ({ workspaceId, prospectId, siteUrl: p.gscSiteUrl!, date: r.key, clicks: Math.round(r.clicks), impressions: Math.round(r.impressions), ctr: r.ctr, position: r.position })) }),
-    db.prospect.update({ where: { id: prospectId }, data: { gscSyncedAt: new Date() } }),
-  ]);
-  return rows.length;
-}
-
-/** Called by the in-app timer: each linked website is synced about once a day. */
-export async function runDailySync(now = new Date()) {
-  const due = await db.prospect.findMany({
-    where: { gscSiteUrl: { not: null }, OR: [{ gscSyncedAt: null }, { gscSyncedAt: { lt: new Date(now.getTime() - 20 * 3600_000) } }] },
-    select: { id: true, workspaceId: true },
-    take: 20,
-  });
-  for (const p of due) {
-    await syncProspect(p.workspaceId, p.id).catch((e) => log.warn("sync failed", { prospectId: p.id, reason: (e as Error).message }));
-  }
-  return due.length;
-}
-
-// ───────────────────────────── Reporting ─────────────────────────────
+// ───────────────────────────── Explorer ─────────────────────────────
 
 export function totals(rows: { clicks: number; impressions: number; position: number }[]): GscTotals {
   const clicks = rows.reduce((s, r) => s + r.clicks, 0);
@@ -121,54 +98,103 @@ export function totals(rows: { clicks: number; impressions: number; position: nu
   return { clicks, impressions, ctr: impressions ? clicks / impressions : 0, position };
 }
 
-const monthRange = (month: string) => {
-  const [y, m] = month.split("-").map(Number);
-  const start = `${month}-01`;
-  const end = ymd(new Date(Date.UTC(y, m, 0)));
-  return { start, end };
-};
-const prevMonth = (month: string) => {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 2, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+export type ExploreInput = {
+  /** Last N days ending at the latest day Search Console has (about 2 days ago). */
+  days?: number;
+  start?: string;
+  end?: string;
+  compare?: boolean;
+  /** An explicit comparison period (e.g. the previous calendar month); otherwise the same length just before. */
+  previous?: { start: string; end: string };
+  dimension: Dimension;
+  /** Text search within the shown dimension (queries or pages containing it). */
+  search?: string;
+  /** Exact filters, e.g. clicking a page to see its queries. */
+  filters?: Partial<Record<"query" | "page" | "country" | "device", string>>;
+  rowLimit?: number;
 };
 
-export type MonthResults = {
+export type ExploreRow = GscRow & { previous: GscRow | null };
+export type ExploreResult = {
   siteUrl: string;
-  current: GscTotals;
-  previous: GscTotals;
-  daily: { date: string; clicks: number; impressions: number }[];
-  queries: (GscRow & { previousClicks: number; previousPosition: number | null })[];
-  pages: (GscRow & { previousClicks: number })[];
-  detailError: string | null;
+  range: { start: string; end: string };
+  previousRange: { start: string; end: string } | null;
+  totals: GscTotals;
+  previousTotals: GscTotals | null;
+  series: { date: string; clicks: number; impressions: number; ctr: number; position: number }[];
+  previousSeries: { date: string; clicks: number; impressions: number }[];
+  rows: ExploreRow[];
 };
 
-/**
- * One month against the month before: totals from the synced daily data, and the top searches and
- * pages read live from Search Console (left out with a note when it cannot be reached).
- */
-export async function monthResults(workspaceId: string, prospectId: string, month: string, fetchImpl: typeof fetch = fetch): Promise<MonthResults | null> {
-  const p = await db.prospect.findFirst({ where: { id: prospectId, workspaceId }, select: { gscSiteUrl: true } });
-  if (!p?.gscSiteUrl) return null;
-  const cur = monthRange(month);
-  const prev = monthRange(prevMonth(month));
-  const [curRows, prevRows] = await Promise.all([
-    db.gscDaily.findMany({ where: { prospectId, date: { gte: cur.start, lte: cur.end } }, orderBy: { date: "asc" } }),
-    db.gscDaily.findMany({ where: { prospectId, date: { gte: prev.start, lte: prev.end } } }),
+export function rangeFor(input: Pick<ExploreInput, "days" | "start" | "end">, now = new Date()) {
+  if (input.start && input.end && /^\d{4}-\d{2}-\d{2}$/.test(input.start) && /^\d{4}-\d{2}-\d{2}$/.test(input.end) && input.start <= input.end) return { start: input.start, end: input.end };
+  const end = new Date(now.getTime() - 2 * DAY);
+  const days = Math.min(Math.max(input.days ?? 28, 1), 480);
+  return { start: ymd(new Date(end.getTime() - (days - 1) * DAY)), end: ymd(end) };
+}
+
+/** The same number of days just before a range. */
+export function previousOf(r: { start: string; end: string }) {
+  const s = Date.parse(`${r.start}T00:00:00Z`);
+  const e = Date.parse(`${r.end}T00:00:00Z`);
+  const len = e - s + DAY;
+  return { start: ymd(new Date(s - len)), end: ymd(new Date(s - DAY)) };
+}
+
+function filterGroups(input: ExploreInput) {
+  const filters: { dimension: string; operator: string; expression: string }[] = [];
+  for (const [dimension, expression] of Object.entries(input.filters ?? {})) if (expression) filters.push({ dimension, operator: "equals", expression });
+  const q = input.search?.trim();
+  if (q && (input.dimension === "query" || input.dimension === "page")) filters.push({ dimension: input.dimension, operator: "contains", expression: q });
+  return filters.length ? [{ groupType: "and", filters }] : undefined;
+}
+
+/** A Search Console report for one website: totals, a daily chart and a table, optionally against the previous period. */
+export async function explore(workspaceId: string, websiteId: string, input: ExploreInput, fetchImpl: typeof fetch = fetch): Promise<ExploreResult> {
+  const w = await db.website.findFirst({ where: { id: websiteId, workspaceId }, select: { gscSiteUrl: true, domain: true } });
+  if (!w) throw new GscError("Website not found.");
+  if (!w.gscSiteUrl) throw new GscError("Link this website's Search Console property first.");
+  // Defence in depth: a property that is not this website's own is never read.
+  if (!propertyMatches(w.gscSiteUrl, w.domain)) throw new GscError("The linked property does not belong to this website. Link its own property again.");
+  const tok = await token(workspaceId, fetchImpl);
+  const range = rangeFor(input);
+  const previousRange = input.previous ?? (input.compare ? previousOf(range) : null);
+  const groups = filterGroups(input);
+  const dims = input.dimension === "searchAppearance" ? ["searchAppearance"] : [input.dimension];
+  const q = (r: { start: string; end: string }, dimensions: string[], rowLimit: number) =>
+    call<{ rows?: { keys?: string[]; clicks: number; impressions: number; ctr: number; position: number }[] }>(
+      tok,
+      `/sites/${encodeURIComponent(w.gscSiteUrl!)}/searchAnalytics/query`,
+      { startDate: r.start, endDate: r.end, dimensions, rowLimit, ...(groups && input.dimension !== "searchAppearance" ? { dimensionFilterGroups: groups } : {}) },
+      fetchImpl,
+    ).then((x) => (x.rows ?? []).map((row) => ({ key: row.keys?.[0] ?? "", clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position })));
+  const limit = Math.min(Math.max(input.rowLimit ?? 1000, 10), 5000);
+  const [series, rows, prevSeries, prevRows] = await Promise.all([
+    q(range, ["date"], 1000),
+    q(range, dims, limit),
+    previousRange ? q(previousRange, ["date"], 1000) : Promise.resolve([] as GscRow[]),
+    previousRange ? q(previousRange, dims, 5000) : Promise.resolve([] as GscRow[]),
   ]);
-  let queries: MonthResults["queries"] = [];
-  let pages: MonthResults["pages"] = [];
-  let detailError: string | null = null;
-  try {
-    const tok = await token(workspaceId, fetchImpl);
-    const q = (range: { start: string; end: string }, dim: "query" | "page") => searchAnalytics(tok, p.gscSiteUrl!, { startDate: range.start, endDate: range.end, dimensions: [dim], rowLimit: 250 }, fetchImpl);
-    const [qc, qp, pc, pp] = await Promise.all([q(cur, "query"), q(prev, "query"), q(cur, "page"), q(prev, "page")]);
-    const before = new Map(qp.map((r) => [r.key, r]));
-    queries = qc.slice(0, 15).map((r) => ({ ...r, previousClicks: before.get(r.key)?.clicks ?? 0, previousPosition: before.get(r.key)?.position ?? null }));
-    const pagesBefore = new Map(pp.map((r) => [r.key, r]));
-    pages = pc.slice(0, 10).map((r) => ({ ...r, previousClicks: pagesBefore.get(r.key)?.clicks ?? 0 }));
-  } catch (e) {
-    detailError = e instanceof GscError ? e.message : "Search Console could not be reached for the search and page details.";
-  }
-  return { siteUrl: p.gscSiteUrl, current: totals(curRows), previous: totals(prevRows), daily: curRows.map((r) => ({ date: r.date, clicks: r.clicks, impressions: r.impressions })), queries, pages, detailError };
+  const before = new Map(prevRows.map((r) => [r.key, r]));
+  return {
+    siteUrl: w.gscSiteUrl,
+    range,
+    previousRange,
+    totals: totals(series),
+    previousTotals: previousRange ? totals(prevSeries) : null,
+    series: series.map((r) => ({ date: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })),
+    previousSeries: prevSeries.map((r) => ({ date: r.key, clicks: r.clicks, impressions: r.impressions })),
+    rows: rows.map((r) => ({ ...r, previous: before.get(r.key) ?? null })),
+  };
+}
+
+/** One calendar month (YYYY-MM) against the month before, for the website's monthly report. */
+export async function monthReport(workspaceId: string, websiteId: string, month: string, fetchImpl: typeof fetch = fetch) {
+  const [y, m] = month.split("-").map(Number);
+  const range = { start: `${month}-01`, end: ymd(new Date(Date.UTC(y, m, 0))) };
+  const prevStart = new Date(Date.UTC(y, m - 2, 1));
+  const prev = { start: ymd(prevStart), end: ymd(new Date(Date.UTC(y, m - 1, 0))) };
+  const run = (dimension: Dimension) => explore(workspaceId, websiteId, { ...range, previous: prev, dimension, rowLimit: 250 }, fetchImpl);
+  const [queries, pages] = await Promise.all([run("query"), run("page")]);
+  return { queries, pages };
 }

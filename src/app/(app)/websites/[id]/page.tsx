@@ -1,0 +1,93 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { ExternalLink, FileText, Trash2 } from "lucide-react";
+import { requireSession } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { getWebsite } from "@/lib/websites";
+import { propertyMatches } from "@/lib/search-console";
+import { CHANGE_LABELS, type ChangeKind } from "@/lib/site-changes";
+import { monthKey } from "@/lib/client-work";
+import { Alert, Badge, Card, CardHeader, PageHeader, buttonClass } from "@/components/ui";
+import { RefreshOnFocus } from "@/components/refresh-on-focus";
+import { deleteWebsiteAction } from "../actions";
+import { Explorer } from "./explorer";
+import { PropertyPicker } from "./property-picker";
+import { WebsiteChanges } from "./changes";
+
+export const metadata: Metadata = { title: "Website" };
+
+export default async function WebsitePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const session = await requireSession();
+  const w = await getWebsite(session.workspace.id, id);
+  if (!w) notFound();
+  const [gsc, changes] = await Promise.all([
+    db.integrationConnection.findFirst({ where: { workspaceId: session.workspace.id, provider: "SEARCH_CONSOLE", status: "CONNECTED", encryptedSecret: { not: null } }, select: { accountLabel: true } }),
+    db.siteChange.findMany({ where: { websiteId: w.id, workspaceId: session.workspace.id }, orderBy: { detectedAt: "desc" }, take: 60 }),
+  ]);
+  const linked = w.gscSiteUrl && propertyMatches(w.gscSiteUrl, w.domain) ? w.gscSiteUrl : null;
+
+  return (
+    <>
+      <RefreshOnFocus />
+      <PageHeader
+        title={w.name}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
+            <a href={w.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-primary">
+              {w.domain} <ExternalLink className="h-3 w-3" />
+            </a>
+            <Badge tone={w.kind === "OWN" ? "primary" : "info"}>{w.kind === "OWN" ? "My site" : "Client site"}</Badge>
+            {linked && <Badge tone="success">{linked}</Badge>}
+          </span>
+        }
+        actions={
+          <>
+            <Link href={`/website-report?site=${w.id}&month=${monthKey()}`} className={buttonClass("secondary")}>
+              <FileText className="h-4 w-4" /> Monthly report
+            </Link>
+            <form action={deleteWebsiteAction.bind(null, w.id)}>
+              <button type="submit" className={buttonClass("ghost")} title="Remove from My Websites">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </form>
+          </>
+        }
+      />
+
+      {!gsc ? (
+        <Alert tone="info" className="mb-6" title="Connect Search Console">
+          Connect your Google account (read-only) on the{" "}
+          <Link href="/integrations" className="font-medium underline">
+            Integrations page
+          </Link>{" "}
+          to see this website&apos;s clicks, impressions, keywords and pages here.
+        </Alert>
+      ) : !linked ? (
+        <Card className="mb-6">
+          <CardHeader title="Search Console" description={`Connected as ${gsc.accountLabel ?? "your Google account"}. Only ${w.domain}'s own property can be linked here.`} />
+          <div className="p-5">
+            <PropertyPicker websiteId={w.id} domain={w.domain} current={null} />
+          </div>
+        </Card>
+      ) : (
+        <div className="mb-6 space-y-3">
+          <Explorer websiteId={w.id} domain={w.domain} />
+          <PropertyPicker websiteId={w.id} domain={w.domain} current={linked} />
+        </div>
+      )}
+
+      <Card>
+        <CardHeader title="Change log" description="What changed on the live website, found by the weekly check — no login to the site is needed." />
+        <div className="p-5">
+          <WebsiteChanges
+            websiteId={w.id}
+            checkedAt={w.changesCheckedAt?.toISOString() ?? null}
+            changes={changes.map((c) => ({ id: c.id, url: c.url, label: CHANGE_LABELS[c.kind as ChangeKind] ?? c.kind, before: c.before, after: c.after, at: c.detectedAt.toISOString() }))}
+          />
+        </div>
+      </Card>
+    </>
+  );
+}
