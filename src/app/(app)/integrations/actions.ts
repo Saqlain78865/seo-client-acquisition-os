@@ -118,6 +118,26 @@ export async function saveApiKeyAction(provider: "GEMINI" | "PAGESPEED" | "PLACE
   }
 }
 
+// ───────────── Google sign-in app (OAuth client) ─────────────
+
+const googleAppSchema = z.object({
+  clientId: z.string().trim().regex(/^[\w-]+\.apps\.googleusercontent\.com$/, "The Client ID ends with .apps.googleusercontent.com"),
+  clientSecret: z.string().trim().min(10, "Paste the full Client Secret").max(200),
+});
+
+/** Saves the OAuth client of the user's own Google Cloud project (encrypted), used for Gmail and Search Console sign-in. */
+export async function saveGoogleAppAction(_: IntegrationState, formData: FormData): Promise<IntegrationState> {
+  try {
+    const session = await requireRole("ADMIN");
+    const parsed = googleAppSchema.safeParse(Object.fromEntries(formData));
+    if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+    await saveCredentials(session.workspace.id, "GOOGLE_OAUTH_APP", { secret: parsed.data, accountLabel: `Client …${parsed.data.clientId.split("-")[1]?.slice(0, 6) ?? ""}` });
+    return done("Google sign-in app saved. You can now connect Search Console and Gmail with Google.");
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 // ───────────── Test & disconnect ─────────────
 
 export async function testConnectionAction(provider: Provider): Promise<IntegrationState> {
@@ -151,7 +171,7 @@ export async function testConnectionAction(provider: Provider): Promise<Integrat
 export async function disconnectAction(provider: Provider): Promise<IntegrationState> {
   try {
     const session = await requireRole("ADMIN");
-    if (provider === "GMAIL_OAUTH") {
+    if (provider === "GMAIL_OAUTH" || provider === "SEARCH_CONSOLE") {
       const c = await getCredentials<{ refreshToken: string }>(session.workspace.id, provider);
       if (c) await revokeToken(c.secret.refreshToken);
     }

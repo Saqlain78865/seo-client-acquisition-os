@@ -82,7 +82,7 @@ export async function sendEmail(workspaceId: string, mail: OutgoingEmail): Promi
   if (!s) throw new EmailError("No email account is connected. Connect Gmail on the Integrations page.", "NOT_CONFIGURED");
   if (s.method === "GMAIL_API") {
     const raw = await buildMime(s.from, s.fromName, mail);
-    return { method: s.method, sender: s.from, messageId: await gmailSend(s.oauth.secret.refreshToken, raw) };
+    return { method: s.method, sender: s.from, messageId: await gmailSend(workspaceId, s.oauth.secret.refreshToken, raw) };
   }
   try {
     const info = await transport(s.smtp).sendMail({ from: fromHeader(s.fromName, s.from), to: mail.to, cc: mail.cc, bcc: mail.bcc, subject: mail.subject, text: mail.text, html: mail.html, attachments: mail.attachments });
@@ -98,7 +98,7 @@ export async function saveDraft(workspaceId: string, mail: OutgoingEmail): Promi
   const s = await resolveSender(workspaceId);
   if (!s) throw new EmailError("No email account is connected.", "NOT_CONFIGURED");
   const raw = await buildMime(s.from, s.fromName, mail);
-  if (s.method === "GMAIL_API") return { method: s.method, sender: s.from, draftId: await gmailCreateDraft(s.oauth.secret.refreshToken, raw) };
+  if (s.method === "GMAIL_API") return { method: s.method, sender: s.from, draftId: await gmailCreateDraft(workspaceId, s.oauth.secret.refreshToken, raw) };
   if (s.method !== "GMAIL_SMTP") throw new EmailError("Drafts are available for Gmail accounts only.", "OTHER");
   const client = new ImapFlow({ host: "imap.gmail.com", port: 993, secure: true, auth: { user: s.smtp.user, pass: s.smtp.pass }, logger: false });
   try {

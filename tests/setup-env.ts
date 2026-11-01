@@ -7,3 +7,4 @@ process.env.STORAGE_DIR = path.resolve(__dirname, "../test-storage");
 process.env.DISABLE_MAINTENANCE = "true";
 process.env.DISABLE_CAMPAIGNS = "true";
 process.env.DISABLE_REAUDITS = "true";
+process.env.DISABLE_TRACKING = "true";

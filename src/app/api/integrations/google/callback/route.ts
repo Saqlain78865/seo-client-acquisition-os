@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const jar = await cookies();
   const stored = jar.get("google_oauth_state")?.value ?? "";
   jar.delete("google_oauth_state");
-  const [state, workspaceId] = stored.split(".");
+  const [state, workspaceId, purpose = "gmail"] = stored.split(".");
   const got = request.nextUrl.searchParams.get("state") ?? "";
   const valid = state && got.length === state.length && timingSafeEqual(Buffer.from(got), Buffer.from(state)) && workspaceId === session.workspace.id;
   if (!valid) return back(request, "error=oauth_state");
@@ -23,7 +23,13 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   if (!code) return back(request, "error=oauth_failed");
   try {
-    const t = await exchangeCode(code);
+    const t = await exchangeCode(session.workspace.id, code);
+    if (purpose === "gsc") {
+      // Read-only Search Console access; the properties are chosen per website on the prospect page.
+      if (!t.scope.includes("webmasters.readonly")) return back(request, "error=oauth_scope_gsc");
+      await saveCredentials(session.workspace.id, "SEARCH_CONSOLE", { secret: { refreshToken: t.refreshToken }, accountLabel: t.email, config: {} });
+      return back(request, "connected=gsc");
+    }
     if (!t.scope.includes("gmail.compose")) return back(request, "error=oauth_scope");
     await saveCredentials(session.workspace.id, "GMAIL_OAUTH", { secret: { refreshToken: t.refreshToken }, accountLabel: t.email, config: {} });
     return back(request, "connected=gmail");

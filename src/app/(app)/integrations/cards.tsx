@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { Provider } from "@/lib/integrations";
-import { disconnectAction, saveApiKeyAction, saveGmailSmtpAction, saveSmtpAction, testConnectionAction, type IntegrationState } from "./actions";
+import { disconnectAction, saveApiKeyAction, saveGmailSmtpAction, saveGoogleAppAction, saveSmtpAction, testConnectionAction, type IntegrationState } from "./actions";
 
 function useFeedback(state: IntegrationState) {
   useEffect(() => {
@@ -77,6 +77,25 @@ export function SmtpForm({ connected, config, disabled }: { connected: boolean; 
           <input type="checkbox" name="secure" defaultChecked={!!config.secure} className="h-4 w-4" /> Use SSL/TLS from the start (usually port 465)
         </label>
         <SubmitRow pending={pending} label="Connect SMTP" connected={connected} />
+      </fieldset>
+    </form>
+  );
+}
+
+export function GoogleAppForm({ connected, disabled }: { connected: boolean; disabled: boolean }) {
+  const [state, action, pending] = useActionState(saveGoogleAppAction, undefined);
+  useFeedback(state);
+  return (
+    <form action={action} className="grid gap-3 sm:grid-cols-2" noValidate>
+      {state?.error && <Alert tone="danger" className="sm:col-span-2">{state.error}</Alert>}
+      <fieldset disabled={disabled} className="contents">
+        <Field label="Client ID" name="clientId" error={state?.fieldErrors?.clientId} hint={connected ? "Saved — paste again only to replace it" : "…apps.googleusercontent.com"}>
+          <Input autoComplete="off" />
+        </Field>
+        <Field label="Client Secret" name="clientSecret" error={state?.fieldErrors?.clientSecret} hint="Stored encrypted on this PC, never shown again">
+          <Input type="password" autoComplete="off" />
+        </Field>
+        <SubmitRow pending={pending} label="Save" connected={connected} />
       </fieldset>
     </form>
   );

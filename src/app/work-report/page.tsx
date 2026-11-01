@@ -6,8 +6,11 @@ import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isMonthKey, monthKey, monthLabel, workReport } from "@/lib/client-work";
 import { progressReport } from "@/lib/progress";
+import { monthResults } from "@/lib/search-console";
+import { CHANGE_LABELS, monthChanges, type ChangeKind } from "@/lib/site-changes";
 import { PrintButton } from "./print-button";
 
+const change = (now: number, before: number) => (before ? `${now >= before ? "+" : ""}${Math.round(((now - before) / before) * 100)}% vs last month` : now ? "new this month" : undefined);
 const fmt = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone: string }) {
@@ -32,7 +35,12 @@ export default async function WorkReportPage({ searchParams }: { searchParams: P
   if (!sp.client) notFound();
   const report = await workReport(session.workspace.id, sp.client, month);
   if (!report) notFound();
-  const progress = await progressReport(session.workspace.id, report.client.id);
+  const [progress, results, changes] = await Promise.all([
+    progressReport(session.workspace.id, report.client.id),
+    monthResults(session.workspace.id, report.client.id, month),
+    monthChanges(session.workspace.id, report.client.id, month),
+  ]);
+  const byKind = changes.reduce<Record<string, number>>((a, c) => ((a[c.kind] = (a[c.kind] ?? 0) + 1), a), {});
   const settings = await db.workspaceSettings.findUnique({ where: { workspaceId: session.workspace.id }, select: { companyName: true, consultantName: true, brandColor: true } });
   const brand = settings?.brandColor || "#4f46e5";
   const total = report.done.length + report.open.length;
@@ -114,6 +122,78 @@ export default async function WorkReportPage({ searchParams }: { searchParams: P
                 {progress.newIssues.length} new item{progress.newIssues.length === 1 ? "" : "s"} found in the latest check (for example after site changes) — we will review them next month.
               </p>
             )}
+          </section>
+        )}
+
+        {results && (
+          <section className="border-b border-[#e2e8f0] px-10 py-8 break-inside-avoid">
+            <h2 className="text-lg font-bold">Results on Google this month</h2>
+            <p className="mt-1 text-sm text-[#64748b]">From Google Search Console · {monthLabel(month)} compared with the month before</p>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Clicks from Google" value={results.current.clicks.toLocaleString()} hint={change(results.current.clicks, results.previous.clicks)} tone={brand} />
+              <Stat label="Times shown on Google" value={results.current.impressions.toLocaleString()} hint={change(results.current.impressions, results.previous.impressions)} tone={brand} />
+              <Stat label="Average position" value={results.current.position ? results.current.position.toFixed(1) : "—"} hint={results.previous.position && results.current.position ? `was ${results.previous.position.toFixed(1)}` : undefined} tone={brand} />
+              <Stat label="Click-through rate" value={`${(results.current.ctr * 100).toFixed(1)}%`} hint={results.previous.impressions ? `was ${(results.previous.ctr * 100).toFixed(1)}%` : undefined} tone={brand} />
+            </div>
+            {results.daily.length > 1 && (
+              <div className="mt-5 flex h-20 items-end gap-px" aria-label="Clicks per day">
+                {results.daily.map((d) => (
+                  <span key={d.date} title={`${d.date}: ${d.clicks} clicks`} className="flex-1 rounded-t" style={{ background: brand, opacity: 0.8, height: `${Math.max(3, (d.clicks / Math.max(1, ...results.daily.map((x) => x.clicks))) * 100)}%` }} />
+                ))}
+              </div>
+            )}
+            {results.queries.length > 0 && (
+              <>
+                <h3 className="mt-6 text-sm font-bold">Top searches that brought visitors</h3>
+                <table className="mt-2 w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-[#64748b]">
+                      <th className="py-1 font-medium">Search</th>
+                      <th className="py-1 text-right font-medium">Clicks</th>
+                      <th className="py-1 text-right font-medium">Position</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.queries.slice(0, 10).map((q) => (
+                      <tr key={q.key} className="border-t border-[#f1f5f9]">
+                        <td className="py-1.5 pr-3">{q.key}</td>
+                        <td className="py-1.5 text-right tabular-nums">
+                          {Math.round(q.clicks)} <span className="text-xs text-[#94a3b8]">{q.previousClicks ? `(was ${Math.round(q.previousClicks)})` : "(new)"}</span>
+                        </td>
+                        <td className={`py-1.5 text-right tabular-nums ${q.previousPosition && q.position < q.previousPosition - 0.5 ? "text-[#16a34a]" : ""}`}>
+                          {q.position.toFixed(1)}
+                          {q.previousPosition ? <span className="text-xs text-[#94a3b8]"> (was {q.previousPosition.toFixed(1)})</span> : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+            {results.detailError && <p className="mt-3 text-xs text-[#64748b]">Search and page details could not be loaded: {results.detailError}</p>}
+          </section>
+        )}
+
+        {changes.length > 0 && (
+          <section className="border-b border-[#e2e8f0] px-10 py-8 break-inside-avoid">
+            <h2 className="text-lg font-bold">Changes made to the website this month</h2>
+            <p className="mt-1 text-sm text-[#64748b]">
+              {Object.entries(byKind)
+                .map(([k, n]) => `${n} × ${(CHANGE_LABELS[k as ChangeKind] ?? k).toLowerCase()}`)
+                .join(" · ")}
+            </p>
+            <ul className="mt-4 space-y-2 text-sm">
+              {changes.slice(0, 25).map((c) => (
+                <li key={c.id} className="rounded-lg border border-[#e2e8f0] px-3 py-2 break-inside-avoid">
+                  <p>
+                    <b className="font-semibold">{CHANGE_LABELS[c.kind as ChangeKind] ?? c.kind}</b> <span className="text-xs text-[#94a3b8]">· {c.detectedAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                  </p>
+                  <p className="truncate text-xs text-[#64748b]">{c.url.replace(/^https?:\/\//, "")}</p>
+                  {c.after && <p className="mt-0.5 text-xs text-[#15803d]">{c.before ? `${c.before} → ` : ""}{c.after}</p>}
+                </li>
+              ))}
+            </ul>
+            {changes.length > 25 && <p className="mt-2 text-xs text-[#64748b]">…and {changes.length - 25} more.</p>}
           </section>
         )}
 

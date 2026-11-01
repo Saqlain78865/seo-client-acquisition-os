@@ -2,19 +2,20 @@ import type { Metadata } from "next";
 import { CheckCircle2, CircleDashed, XCircle } from "lucide-react";
 import { hasRole, requireSession } from "@/lib/auth";
 import { listConnections, type ConnectionView, type Provider } from "@/lib/integrations";
-import { googleOAuthConfigured, redirectUri } from "@/lib/messaging/google-oauth";
+import { googleClient, redirectUri } from "@/lib/messaging/google-oauth";
 import { formatDate } from "@/lib/utils";
 import { Alert, Badge, Card, CardHeader, buttonClass } from "@/components/ui";
-import { ApiKeyForm, ConnectionButtons, GmailSmtpForm, SmtpForm } from "./cards";
+import { ApiKeyForm, ConnectionButtons, GmailSmtpForm, GoogleAppForm, SmtpForm } from "./cards";
 
 export const metadata: Metadata = { title: "Integrations" };
 
 const OAUTH_ERRORS: Record<string, string> = {
   forbidden: "Only owners and admins can connect integrations.",
-  google_not_configured: "Google sign-in needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env (see the steps on the card).",
+  google_not_configured: "Add the Google OAuth Client ID and Client Secret in the “Google sign-in app” card first.",
   oauth_state: "The Google sign-in could not be verified (expired or tampered). Please try again.",
   oauth_denied: "Google access was not granted.",
   oauth_scope: "Gmail permission was not granted. Tick the Gmail checkbox on Google's consent screen.",
+  oauth_scope_gsc: "Search Console permission was not granted. Tick the Search Console checkbox on Google's consent screen.",
   oauth_failed: "Google sign-in failed. Please try again.",
 };
 
@@ -76,6 +77,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const sp = await searchParams;
   const c = await listConnections(session.workspace.id);
   const canEdit = hasRole(session, "ADMIN");
+  const googleReady = !!(await googleClient(session.workspace.id));
   const anyEmail = ["GMAIL_OAUTH", "GMAIL_SMTP", "SMTP"].some((p) => c[p as Provider].hasSecret && c[p as Provider].status === "CONNECTED");
 
   return (
@@ -86,6 +88,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
       </div>
       {sp.error && <Alert tone="danger" className="mb-4">{OAUTH_ERRORS[sp.error] ?? "Something went wrong."}</Alert>}
       {sp.connected === "gmail" && <Alert tone="success" className="mb-4">Gmail connected through Google sign-in.</Alert>}
+      {sp.connected === "gsc" && <Alert tone="success" className="mb-4">Search Console connected (read-only). Choose each website&apos;s property on its prospect page → Search Console.</Alert>}
       {!canEdit && <Alert tone="info" className="mb-4">Only owners and admins can change integrations.</Alert>}
 
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Email</h2>
@@ -131,19 +134,66 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </ol>
           }
         >
-          {googleOAuthConfigured() ? (
+          {googleReady ? (
             canEdit && (
               <a href="/api/integrations/google/start" className={buttonClass(c.GMAIL_OAUTH.hasSecret ? "secondary" : "primary")}>
                 {c.GMAIL_OAUTH.hasSecret ? "Reconnect Google account" : "Connect with Google"}
               </a>
             )
           ) : (
-            <p className="text-sm text-muted">Not available until GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set. The App Password option above works without them.</p>
+            <p className="text-sm text-muted">Add the Google sign-in app (Client ID and Secret) below first. The App Password option above works without it.</p>
           )}
         </IntegrationCard>
 
         <IntegrationCard title="Other email provider (SMTP)" c={c.SMTP} canEdit={canEdit} capabilities={["Send proposal emails from any mailbox that supports SMTP (Outlook, Zoho, cPanel…)"]} steps={<p>Use the SMTP details from your email provider&apos;s help pages.</p>}>
           <SmtpForm connected={c.SMTP.hasSecret} config={c.SMTP.config} disabled={!canEdit} />
+        </IntegrationCard>
+      </div>
+
+      <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-muted">Google sign-in and Search Console</h2>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <IntegrationCard
+          title="Google sign-in app"
+          c={c.GOOGLE_OAUTH_APP}
+          canEdit={canEdit}
+          canTest={false}
+          capabilities={["Your own Google Cloud OAuth client, used for “Connect with Google”", "Needed for Search Console and for Gmail via Google sign-in", "The Client Secret is encrypted and stays on this computer"]}
+          steps={
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>console.cloud.google.com → APIs &amp; Services → enable “Google Search Console API” (and “Gmail API” for Gmail sign-in).</li>
+              <li>Google Auth Platform → set up the consent screen (External) and publish it (In production).</li>
+              <li>
+                Clients → Create client → Web application. Authorised redirect URI: <code className="break-all text-xs">{redirectUri()}</code>
+              </li>
+              <li>Paste the Client ID and Client Secret here.</li>
+            </ol>
+          }
+        >
+          <GoogleAppForm connected={c.GOOGLE_OAUTH_APP.hasSecret} disabled={!canEdit} />
+        </IntegrationCard>
+        <IntegrationCard
+          title="Google Search Console"
+          c={c.SEARCH_CONSOLE}
+          canEdit={canEdit}
+          canTest={false}
+          capabilities={["Read-only: clicks, impressions, positions, top searches and pages", "Synced every day for each website you link on its prospect page", "Results section of the monthly client report"]}
+          steps={
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>Save the Google sign-in app on the left.</li>
+              <li>Press “Connect Search Console” and sign in with the Google account that sees the websites in Search Console.</li>
+              <li>Clients add your email as a user in their Search Console (Settings → Users and permissions → Restricted is enough).</li>
+            </ol>
+          }
+        >
+          {googleReady ? (
+            canEdit && (
+              <a href="/api/integrations/google/start?for=gsc" className={buttonClass(c.SEARCH_CONSOLE.hasSecret ? "secondary" : "primary")}>
+                {c.SEARCH_CONSOLE.hasSecret ? "Reconnect Search Console" : "Connect Search Console"}
+              </a>
+            )
+          ) : (
+            <p className="text-sm text-muted">Save the Google sign-in app first.</p>
+          )}
         </IntegrationCard>
       </div>
 

@@ -1,12 +1,32 @@
 import "server-only";
 
 /**
- * Google OAuth 2.0 for the official Gmail API. Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET
- * from a Google Cloud project (OAuth consent screen + Web client with the redirect URI below).
- * Scope gmail.compose allows creating drafts and sending — nothing else in the mailbox.
+ * Google OAuth 2.0 for the official Gmail and Search Console APIs. The OAuth client (Client ID +
+ * Client Secret of a Google Cloud "Web application" client) is saved encrypted on the Integrations
+ * page, or comes from GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET. Each connection asks for one narrow
+ * permission: gmail.compose (drafts and sending) or webmasters.readonly (read Search Console).
  */
 
 export const GMAIL_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/gmail.compose"];
+export const SEARCH_CONSOLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/webmasters.readonly"];
+export type GoogleClient = { id: string; secret: string };
+export type GooglePurpose = "gmail" | "gsc";
+
+/** The OAuth client saved for the workspace, else the one from the environment. */
+export async function googleClient(workspaceId: string): Promise<GoogleClient | null> {
+  const { getCredentials } = await import("../integrations");
+  const saved = await getCredentials<{ clientId: string; clientSecret: string }>(workspaceId, "GOOGLE_OAUTH_APP");
+  if (saved?.secret.clientId && saved.secret.clientSecret) return { id: saved.secret.clientId, secret: saved.secret.clientSecret };
+  const id = process.env.GOOGLE_CLIENT_ID?.trim();
+  const secret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  return id && secret ? { id, secret } : null;
+}
+
+async function requireClient(workspaceId: string) {
+  const c = await googleClient(workspaceId);
+  if (!c) throw new GoogleAuthError("Google sign-in is not set up: add the OAuth Client ID and Secret on the Integrations page.", "NOT_CONFIGURED");
+  return c;
+}
 
 export class GoogleAuthError extends Error {
   constructor(
@@ -17,21 +37,17 @@ export class GoogleAuthError extends Error {
   }
 }
 
-export function googleOAuthConfigured() {
-  return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
-}
 
 export function redirectUri() {
   return `${(process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/api/integrations/google/callback`;
 }
 
-export function buildAuthUrl(state: string) {
-  if (!googleOAuthConfigured()) throw new GoogleAuthError("Google sign-in is not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).", "NOT_CONFIGURED");
+export function buildAuthUrl(state: string, client: GoogleClient, purpose: GooglePurpose = "gmail") {
   const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  u.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID!);
+  u.searchParams.set("client_id", client.id);
   u.searchParams.set("redirect_uri", redirectUri());
   u.searchParams.set("response_type", "code");
-  u.searchParams.set("scope", GMAIL_SCOPES.join(" "));
+  u.searchParams.set("scope", (purpose === "gsc" ? SEARCH_CONSOLE_SCOPES : GMAIL_SCOPES).join(" "));
   u.searchParams.set("access_type", "offline");
   u.searchParams.set("prompt", "consent");
   u.searchParams.set("include_granted_scopes", "true");
@@ -41,30 +57,30 @@ export function buildAuthUrl(state: string) {
 
 type TokenResponse = { access_token: string; expires_in: number; refresh_token?: string; scope?: string; id_token?: string; error?: string; error_description?: string };
 
-async function tokenRequest(params: Record<string, string>, fetchImpl: typeof fetch) {
+async function tokenRequest(client: GoogleClient, params: Record<string, string>, fetchImpl: typeof fetch) {
   const res = await fetchImpl("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID!, client_secret: process.env.GOOGLE_CLIENT_SECRET!, ...params }),
+    body: new URLSearchParams({ client_id: client.id, client_secret: client.secret, ...params }),
   });
   const body = (await res.json().catch(() => ({}))) as TokenResponse;
   if (!res.ok || body.error) {
-    if (body.error === "invalid_grant") throw new GoogleAuthError("Google access was revoked or expired. Reconnect Gmail.", "REVOKED");
+    if (body.error === "invalid_grant") throw new GoogleAuthError("Google access was revoked or expired. Reconnect it on the Integrations page.", "REVOKED");
     throw new GoogleAuthError(`Google token request failed: ${body.error_description ?? body.error ?? res.status}`, "EXCHANGE_FAILED");
   }
   return body;
 }
 
-export async function exchangeCode(code: string, fetchImpl: typeof fetch = fetch) {
-  const t = await tokenRequest({ code, grant_type: "authorization_code", redirect_uri: redirectUri() }, fetchImpl);
+export async function exchangeCode(workspaceId: string, code: string, fetchImpl: typeof fetch = fetch) {
+  const t = await tokenRequest(await requireClient(workspaceId), { code, grant_type: "authorization_code", redirect_uri: redirectUri() }, fetchImpl);
   if (!t.refresh_token) throw new GoogleAuthError("Google did not return a refresh token. Remove the app's access in your Google account and connect again.", "EXCHANGE_FAILED");
   const info = await fetchImpl("https://openidconnect.googleapis.com/v1/userinfo", { headers: { authorization: `Bearer ${t.access_token}` } });
   const user = (await info.json().catch(() => ({}))) as { email?: string };
   return { refreshToken: t.refresh_token, accessToken: t.access_token, email: user.email ?? null, scope: t.scope ?? "" };
 }
 
-export async function accessTokenFor(refreshToken: string, fetchImpl: typeof fetch = fetch) {
-  return (await tokenRequest({ refresh_token: refreshToken, grant_type: "refresh_token" }, fetchImpl)).access_token;
+export async function accessTokenFor(workspaceId: string, refreshToken: string, fetchImpl: typeof fetch = fetch) {
+  return (await tokenRequest(await requireClient(workspaceId), { refresh_token: refreshToken, grant_type: "refresh_token" }, fetchImpl)).access_token;
 }
 
 async function gmailCall(path: string, accessToken: string, body: unknown, fetchImpl: typeof fetch) {
@@ -80,14 +96,14 @@ async function gmailCall(path: string, accessToken: string, body: unknown, fetch
   return json;
 }
 
-export async function gmailSend(refreshToken: string, rawMime: Buffer, fetchImpl: typeof fetch = fetch) {
-  const token = await accessTokenFor(refreshToken, fetchImpl);
+export async function gmailSend(workspaceId: string, refreshToken: string, rawMime: Buffer, fetchImpl: typeof fetch = fetch) {
+  const token = await accessTokenFor(workspaceId, refreshToken, fetchImpl);
   const r = await gmailCall("messages/send", token, { raw: rawMime.toString("base64url") }, fetchImpl);
   return r.id!;
 }
 
-export async function gmailCreateDraft(refreshToken: string, rawMime: Buffer, fetchImpl: typeof fetch = fetch) {
-  const token = await accessTokenFor(refreshToken, fetchImpl);
+export async function gmailCreateDraft(workspaceId: string, refreshToken: string, rawMime: Buffer, fetchImpl: typeof fetch = fetch) {
+  const token = await accessTokenFor(workspaceId, refreshToken, fetchImpl);
   const r = await gmailCall("drafts", token, { message: { raw: rawMime.toString("base64url") } }, fetchImpl);
   return r.id!;
 }

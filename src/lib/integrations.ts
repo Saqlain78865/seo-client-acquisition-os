@@ -15,6 +15,8 @@ export const PROVIDERS = {
   GEMINI: { name: "Google Gemini (AI writing)", group: "AI" },
   PAGESPEED: { name: "PageSpeed Insights", group: "Research" },
   PLACES: { name: "Google Places (Business Profile data)", group: "Research" },
+  GOOGLE_OAUTH_APP: { name: "Google sign-in app (OAuth Client ID & Secret)", group: "Google" },
+  SEARCH_CONSOLE: { name: "Google Search Console", group: "Research" },
 } as const;
 export type Provider = keyof typeof PROVIDERS;
 

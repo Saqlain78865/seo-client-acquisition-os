@@ -180,6 +180,11 @@ model Prospect {
   nextFollowUpAt     DateTime?
   // The business's own "write a review" link (Google Business Profile → Ask for reviews), for its review kit.
   reviewLink         String?
+  // Search Console property linked to this website (e.g. "sc-domain:example.com"), synced daily.
+  gscSiteUrl         String?
+  gscSyncedAt        DateTime?
+  // Last weekly check of the live website for changes.
+  changesCheckedAt   DateTime?
   lastActivityAt     DateTime  @default(now())
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -203,6 +208,9 @@ model Prospect {
   domainChecks      DomainCheck[]
   gbpProfiles       GbpProfile[]
   reviewScreenshots ReviewScreenshot[]
+  gscDaily          GscDaily[]
+  pageSnapshots     PageSnapshot[]
+  siteChanges       SiteChange[]
   kickoffTasks      KickoffTask[]
   clientTasks       ClientTask[]
 
@@ -1117,4 +1125,58 @@ model ReviewScreenshot {
   prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
   @@index([prospectId, createdAt])
+}
+
+/// One day of Search Console totals for a linked website (Google reports with a 2–3 day delay).
+model GscDaily {
+  id          String @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  siteUrl     String
+  // YYYY-MM-DD
+  date        String
+  clicks      Int
+  impressions Int
+  ctr         Float
+  position    Float
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@unique([prospectId, date])
+}
+
+/// The last seen state of one page of a tracked website, compared on every weekly check.
+model PageSnapshot {
+  id              String   @id @default(cuid())
+  prospectId      String
+  url             String
+  status          Int?
+  title           String?
+  metaDescription String?
+  h1              String?
+  canonical       String?
+  robotsMeta      String?
+  wordCount       Int?
+  contentHash     String?
+  takenAt         DateTime @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@unique([prospectId, url])
+}
+
+/// A change found on a tracked website: NEW_PAGE | REMOVED_PAGE | TITLE | META_DESCRIPTION | H1 | CONTENT | STATUS | CANONICAL | INDEXING
+model SiteChange {
+  id          String   @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  url         String
+  kind        String
+  before      String?
+  after       String?
+  detectedAt  DateTime @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, detectedAt])
 }

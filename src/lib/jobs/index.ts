@@ -9,7 +9,7 @@ export { JOB_TYPES } from "./handlers";
 const MAINTENANCE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DIGEST_CHECK_MS = 60 * 60 * 1000;
 const CAMPAIGN_TICK_MS = 5 * 60 * 1000;
-const state = globalThis as unknown as { __maintenanceTimer?: NodeJS.Timeout; __digestTimer?: NodeJS.Timeout; __campaignTimer?: NodeJS.Timeout; __reauditTimer?: NodeJS.Timeout };
+const state = globalThis as unknown as { __maintenanceTimer?: NodeJS.Timeout; __digestTimer?: NodeJS.Timeout; __campaignTimer?: NodeJS.Timeout; __reauditTimer?: NodeJS.Timeout; __trackingTimer?: NodeJS.Timeout };
 
 /**
  * Starts the in-process job worker if it is not running yet. Called from the authenticated app
@@ -46,6 +46,16 @@ export function ensureWorker() {
     state.__campaignTimer = setInterval(tick, CAMPAIGN_TICK_MS);
     state.__campaignTimer.unref?.();
     setTimeout(tick, 120_000).unref?.();
+  }
+  // Tracked websites: Search Console totals every day, and a check of the live site for changes every week.
+  if (!state.__trackingTimer && process.env.DISABLE_MAINTENANCE !== "true" && process.env.DISABLE_TRACKING !== "true") {
+    const track = () =>
+      Promise.all([import("../search-console").then((m) => m.runDailySync()), import("../site-changes").then((m) => m.runWeeklyChangeChecks())]).catch((e) =>
+        logger("tracking").error("tracking check failed", { err: e }),
+      );
+    state.__trackingTimer = setInterval(track, DIGEST_CHECK_MS);
+    state.__trackingTimer.unref?.();
+    setTimeout(track, 240_000).unref?.();
   }
   // Won clients: their website is audited again once a month for the progress report.
   if (!state.__reauditTimer && process.env.DISABLE_MAINTENANCE !== "true" && process.env.DISABLE_REAUDITS !== "true") {
