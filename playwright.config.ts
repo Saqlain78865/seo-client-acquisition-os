@@ -24,6 +24,6 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120_000,
     // Keys from .env are blanked: tests must be deterministic and must not use the owner's API quota.
-    env: { DATABASE_URL: "file:./e2e.db", STORAGE_DIR: "e2e-storage", GEMINI_API_KEY: "", PAGESPEED_API_KEY: "", GOOGLE_PLACES_API_KEY: "" },
+    env: { DATABASE_URL: "file:./e2e.db", STORAGE_DIR: "e2e-storage", DISABLE_TRACKING: "true", GEMINI_API_KEY: "", PAGESPEED_API_KEY: "", GOOGLE_PLACES_API_KEY: "" },
   },
 });
