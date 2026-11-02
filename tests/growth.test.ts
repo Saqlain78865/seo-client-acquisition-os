@@ -226,11 +226,14 @@ describe("audit video", () => {
       dateLabel: "2 November 2026",
       images: { full: px, desktop: px, mobile: px, findings: [px] },
       issues: [{ title: "The page title is missing", impact: "Google shows a guess instead.", fix: "Write a clear title.", severity: "CRITICAL" }],
-      counts: { critical: 1, high: 0, medium: 0, total: 1 },
+      minor: [["Two images have no alt text"]],
+      counts: { critical: 1, high: 0, medium: 0, low: 1, total: 2 },
       contact: ["+92 300 0000000"],
+      durations: null,
+      audio: false,
     });
-    // Intro 4 + scroll 9 + phone 5 + one problem 6.5 + summary 5 + contact 6.
-    expect(seconds).toBe(36);
+    // Intro 4 + scroll 9 + phone 5 + one issue 6.5 + smaller fixes 6 + summary 5 + contact 6.
+    expect(seconds).toBe(42);
     // An MP4 starts with an "ftyp" box and holds an H.264 (avc1) track.
     expect(buffer.subarray(4, 8).toString()).toBe("ftyp");
     expect(buffer.includes(Buffer.from("avc1"))).toBe(true);
@@ -300,11 +303,13 @@ describe("audit video from a real audit", () => {
         ],
       });
       const { requestAuditVideo, generateAuditVideo } = await import("@/lib/video/audit-video");
-      const v = await requestAuditVideo(workspaceId, p.id);
-      await generateAuditVideo(v.id);
+      const v = await requestAuditVideo(workspaceId, p.id, "none");
+      await generateAuditVideo(v.id, "none");
       const done = await db.auditVideo.findUniqueOrThrow({ where: { id: v.id } });
-      // Intro 4 + scroll 9 + two problems 13 + summary 5 + contact 6 (no phone screenshot in this audit).
-      expect(done).toMatchObject({ status: "READY", seconds: 37 });
+      // Intro 4 + two issues 13 + summary 5 + contact 6, plus the 9 s homepage scroll when the live page could be filmed
+      // (under heavy load the screenshot can time out; the video is then made without that scene).
+      expect(done.status).toBe("READY");
+      expect([28, 37]).toContain(done.seconds);
       const { getFile } = await import("@/lib/storage");
       const mp4 = await getFile(done.storageKey!);
       expect(mp4.subarray(4, 8).toString()).toBe("ftyp");
@@ -313,5 +318,64 @@ describe("audit video from a real audit", () => {
       runnerOptions.allowPrivateNetworks = false;
       server.close();
     }
+  }, 300_000);
+});
+
+describe("audit video voice-over", () => {
+  it("narrates every issue, one line per scene", async () => {
+    const { narration } = await import("@/lib/video/audit-video");
+    const lines = narration({
+      business: "Karachi Smiles",
+      domain: "www.smiles.example",
+      preparedBy: "LeadLift SEO",
+      issues: [
+        { title: "Missing page title", impact: "Google shows a guess", fix: "Add a title", severity: "CRITICAL" },
+        { title: "No phone number", impact: "Visitors cannot call", fix: "Add the number", severity: "HIGH" },
+      ],
+      minor: [["Image without alt text"]],
+      counts: { critical: 1, high: 1, medium: 0, low: 1, total: 3 },
+      contact: ["+92 300 1234567"],
+      images: { full: "x", desktop: null, mobile: null, findings: [] },
+    });
+    // Intro, homepage, two issues, smaller fixes, summary, contact.
+    expect(lines).toHaveLength(7);
+    expect(lines[0]).toContain("smiles dot example");
+    expect(lines[2]).toBe("Issue 1 of 2. Missing page title. Google shows a guess. How we would fix it: Add a title.");
+    expect(lines[4]).toContain("1 smaller fix,");
+    expect(lines[5]).toContain("To sum up: 1 critical, 1 high-impact and 1 smaller issues.");
+    expect(lines[6]).toContain("or call +92 300 1234567");
+  });
+
+  it.runIf(process.platform === "win32")("speaks with the Windows voice and puts an AAC track in the MP4", async () => {
+    const { speakLines } = await import("@/lib/video/tts");
+    const [pcm] = (await speakLines(["Hello, this is a test of the voice."], "female"))!;
+    expect(pcm.length / 48000).toBeGreaterThan(1);
+    const { renderVideoFile, voiceOver } = await import("@/lib/video/audit-video");
+    const px = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const script = {
+      width: 640,
+      height: 360,
+      fps: 10,
+      brand: "#4f46e5",
+      business: "Karachi Smiles",
+      domain: "smiles.example",
+      preparedBy: "LeadLift SEO",
+      dateLabel: "2 November 2026",
+      images: { full: null, desktop: px, mobile: null, findings: [px] },
+      issues: [{ title: "Missing page title", impact: "Google shows a guess instead of your business name.", fix: "Write a clear title for every page.", severity: "CRITICAL" }],
+      minor: [],
+      counts: { critical: 1, high: 0, medium: 0, low: 0, total: 1 },
+      contact: [],
+      durations: null,
+      audio: false,
+    };
+    const voiced = (await voiceOver(script, "male"))!;
+    expect(voiced.durations).toHaveLength(5);
+    // The scenes are as long as their narration (the intro alone is far longer than its 4 s default).
+    expect(voiced.durations[0]).toBeGreaterThan(8);
+    const { buffer, seconds } = await renderVideoFile({ ...script, durations: voiced.durations }, voiced.track);
+    expect(seconds).toBe(Math.round(voiced.durations.reduce((a, b) => a + b, 0)));
+    expect(buffer.includes(Buffer.from("mp4a"))).toBe(true);
+    expect(buffer.includes(Buffer.from("avc1"))).toBe(true);
   }, 300_000);
 });

@@ -73,7 +73,7 @@ export function Finder({ googleReady }: { googleReady: boolean }) {
         >
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="dentist Dubai, plumber Manchester, thai restaurant Brooklyn…" aria-label="Business type and city" className="sm:flex-1" />
           <Button type="submit" disabled={pending || query.trim().length < 3}>
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Find businesses
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {pending ? (source === "OSM" ? "Searching the map… (up to 30 s)" : "Searching…") : "Find businesses"}
           </Button>
         </form>
         <p className="mt-2 text-xs text-muted">
@@ -117,6 +117,7 @@ export function Finder({ googleReady }: { googleReady: boolean }) {
                 </span>
               )}
             </div>
+            {b.detailsUnknown && <p className="text-xs text-muted">Website and phone are not listed on the map for this place — check it on Google Maps.</p>}
             {b.weaknesses.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {b.weaknesses.map((w) => (

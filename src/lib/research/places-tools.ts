@@ -22,6 +22,8 @@ export type FoundBusiness = {
   score: number;
   /** Where the business came from: Google Places (ratings and reviews) or OpenStreetMap (free, no ratings). */
   source?: "GOOGLE" | "OSM";
+  /** OpenStreetMap only: the map's website and phone details could not be read for this place. */
+  detailsUnknown?: boolean;
 };
 
 type FoundPlace = {

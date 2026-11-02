@@ -15,5 +15,6 @@ registerJobHandler(JOB_TYPES.AUDIT_RUN, async (payload) => {
 
 registerJobHandler("audit.video", async (payload) => {
   const { generateAuditVideo } = await import("../video/audit-video");
-  await generateAuditVideo(String(payload.videoId));
+  const voice = payload.voice === "male" || payload.voice === "none" ? payload.voice : "female";
+  await generateAuditVideo(String(payload.videoId), voice);
 });

@@ -113,13 +113,16 @@ describe("Places API features (fake Google)", () => {
     expect(splitQuery("thai restaurant brooklyn")).toEqual({ what: "thai restaurant", where: "brooklyn" });
     expect(overpassQuery("dentist", [1, 2, 3, 4])).toContain('nwr["amenity"="dentist"](1,2,3,4);');
     const list = toBusinesses([
-      { type: "node", id: 1, lat: 24.8, lon: 67, tags: { name: "Smile Care", amenity: "dentist", website: "smilecare.example", phone: "+92 21 111" } },
-      { type: "way", id: 2, center: { lat: 24.9, lon: 67.1 }, tags: { name: "Dr Ali Dental", amenity: "dentist" } },
+      { type: "node", id: 1, lat: 24.8, lon: 67, tags: { name: "Smile Care", amenity: "dentist", website: "smilecare.example", phone: "+92 21 111", _details: "1" } },
+      { type: "way", id: 2, center: { lat: 24.9, lon: 67.1 }, tags: { name: "Dr Ali Dental", amenity: "dentist", _details: "1" } },
+      // Found by name only (details not read): never called "no website".
+      { type: "node", id: 4, tags: { name: "Zubair Dental", amenity: "dentist" } },
       { type: "node", id: 3, tags: { amenity: "dentist" } },
     ]);
     expect(list.map((b) => [b.name, b.weaknesses])).toEqual([
       ["Dr Ali Dental", ["No website on OpenStreetMap", "No phone on OpenStreetMap"]],
       ["Smile Care", []],
+      ["Zubair Dental", []],
     ]);
     expect(list[1].website).toBe("https://smilecare.example");
 
@@ -134,7 +137,8 @@ describe("Places API features (fake Google)", () => {
     // No Places key is needed for OpenStreetMap.
     const [found] = await findProspects(ws.id, "dentist Karachi", fake, "OSM");
     // The city, then Overpass (main server and mirror) and Nominatim's search together.
-    expect(urls.filter((u) => u.includes("overpass"))).toHaveLength(2);
+    expect(urls.filter((u) => u.includes("overpass"))).toHaveLength(3);
+    expect(urls.some((u) => u.includes("photon"))).toBe(true);
     expect(urls.filter((u) => u.includes("nominatim")).length).toBeGreaterThanOrEqual(2);
     expect(found).toMatchObject({ name: "Dr Ali Dental", source: "OSM", prospectId: null });
     const r = await addFoundBusiness(ws.id, user.id, found, "dentist Karachi");
