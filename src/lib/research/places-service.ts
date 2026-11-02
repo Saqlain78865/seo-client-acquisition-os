@@ -26,6 +26,23 @@ const wrap = async <T>(fn: () => Promise<T>) => {
   }
 };
 
+/**
+ * The last Places API result for the workspace: an error from Google (key blocked, API not enabled,
+ * no billing) or null when it worked. Kept on the PLACES connection row, made if needed.
+ */
+export async function placesStatus(workspaceId: string, error: string | null) {
+  await db.integrationConnection.upsert({
+    where: { workspaceId_provider: { workspaceId, provider: "PLACES" } },
+    create: { workspaceId, provider: "PLACES", status: error ? "ERROR" : "NOT_CONFIGURED", lastError: error?.slice(0, 500) ?? null, lastTestedAt: new Date() },
+    update: { lastError: error?.slice(0, 500) ?? null, lastTestedAt: new Date(), ...(error ? {} : { status: "CONNECTED" }) },
+  });
+}
+
+export async function placesProblem(workspaceId: string) {
+  const c = await db.integrationConnection.findUnique({ where: { workspaceId_provider: { workspaceId, provider: "PLACES" } }, select: { lastError: true } });
+  return c?.lastError ?? null;
+}
+
 /** Businesses for a search, weakest profiles first, marked when they are already prospects. */
 export async function findProspects(workspaceId: string, query: string, fetchImpl?: typeof fetch, source: "GOOGLE" | "OSM" = "GOOGLE") {
   const q = query.trim().slice(0, 120);
@@ -40,7 +57,17 @@ export async function findProspects(workspaceId: string, query: string, fetchImp
     }
   } else {
     const key = await placesKey(workspaceId);
-    found = await wrap(() => findBusinesses(key, q, fetchImpl));
+    try {
+      found = await findBusinesses(key, q, fetchImpl);
+      await placesStatus(workspaceId, null);
+    } catch (e) {
+      if (e instanceof GbpError) {
+        // Remembered, so the Finder can say why Google is unavailable instead of failing again.
+        if (e.code === "NOT_ENABLED" || e.code === "INVALID_KEY") await placesStatus(workspaceId, e.message);
+        throw new ResearchError(e.message);
+      }
+      throw e;
+    }
   }
   const domains = found.map((b) => (b.website ? normalizeDomain(normalizeWebsiteUrl(b.website)) : null)).filter((d): d is string => !!d);
   const placeIds = found.map((b) => b.placeId);

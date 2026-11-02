@@ -302,8 +302,9 @@ describe("audit video from a real audit", () => {
           { auditId: audit.id, ruleId: "b", category: "Local SEO", title: "No phone number on the home page", severity: "HIGH", evidenceStatus: "CONFIRMED", affectedUrls: [url], observedFacts: "No tel: link.", recommendation: "Add the phone number." },
         ],
       });
-      const { requestAuditVideo, generateAuditVideo } = await import("@/lib/video/audit-video");
-      const v = await requestAuditVideo(workspaceId, p.id, "none");
+      const { generateAuditVideo } = await import("@/lib/video/audit-video");
+      // Made directly (not through the job queue, whose worker could make it a second time).
+      const v = await db.auditVideo.create({ data: { workspaceId, prospectId: p.id, auditId: audit.id } });
       await generateAuditVideo(v.id, "none");
       const done = await db.auditVideo.findUniqueOrThrow({ where: { id: v.id } });
       // Intro 4 + two issues 13 + summary 5 + contact 6, plus the 9 s homepage scroll when the live page could be filmed

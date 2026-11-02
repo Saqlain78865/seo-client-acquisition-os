@@ -195,6 +195,10 @@ model Prospect {
   // Lead score 0–100 (how promising and how warm), with the reasons; refreshed by the app.
   leadScore          Int?
   leadScoreReasons   Json?
+  // What the website is built with (CMS, plugins, analytics…) and the email domain's SPF/DKIM/DMARC, from the last check.
+  techStack          Json?
+  emailHealth        Json?
+  techCheckedAt      DateTime?
   lastActivityAt     DateTime  @default(now())
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -1253,6 +1257,7 @@ model Website {
   reports       ReportDelivery[]
   competitors   WatchedCompetitor[]
   indexStatuses IndexStatus[]
+  contentPlans  ContentPlan[]
 
   @@unique([workspaceId, domain])
 }
@@ -1448,4 +1453,42 @@ model AuditVideo {
   prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
   @@index([prospectId, createdAt])
+}
+
+/// A 12-month content calendar for a website: topics per month from its Search Console data.
+model ContentPlan {
+  id          String   @id @default(cuid())
+  workspaceId String
+  websiteId   String
+  // YYYY-MM of the first month
+  startMonth  String
+  // AI (Gemini) or DATA (rules on the Search Console numbers alone)
+  source      String
+  createdAt   DateTime @default(now())
+
+  website Website           @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  items   ContentPlanItem[]
+
+  @@index([websiteId, createdAt])
+}
+
+model ContentPlanItem {
+  id        String  @id @default(cuid())
+  planId    String
+  // YYYY-MM
+  month     String
+  title     String
+  keyword   String
+  // NEW_ARTICLE | REFRESH | SERVICE_PAGE | FAQ
+  kind      String
+  reason    String
+  // A page of the site the new content should link to, when there is a good one.
+  linkTo    String?
+  // PLANNED | DONE | SKIPPED
+  status    String  @default("PLANNED")
+  sortOrder Int     @default(0)
+
+  plan ContentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, month])
 }

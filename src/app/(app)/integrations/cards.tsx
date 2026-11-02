@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { Provider } from "@/lib/integrations";
-import { disconnectAction, driveBackupNowAction, saveApiKeyAction, saveGmailSmtpAction, saveGoogleAppAction, saveSmtpAction, testConnectionAction, type IntegrationState } from "./actions";
+import { EmailHealthView } from "@/components/email-health-view";
+import { disconnectAction, driveBackupNowAction, ownEmailHealthAction, saveApiKeyAction, saveGmailSmtpAction, saveGoogleAppAction, saveSmtpAction, testConnectionAction, type IntegrationState } from "./actions";
 
 function useFeedback(state: IntegrationState) {
   useEffect(() => {
@@ -162,6 +163,35 @@ export function DriveBackupNow({ lastBackupAt, lastBackupName }: { lastBackupAt:
       >
         {pending ? "Backing up…" : "Back up now"}
       </Button>
+    </div>
+  );
+}
+
+export function OwnEmailHealth() {
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<{ health: import("@/lib/email-health").EmailHealth; note: string | null } | null>(null);
+  return (
+    <div className="space-y-3">
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await ownEmailHealthAction();
+            if (!r.ok) return void toast.error(r.error);
+            setResult({ health: r.health, note: r.note });
+          })
+        }
+      >
+        {pending ? "Checking DNS…" : "Check my email domain"}
+      </Button>
+      {result && (
+        <>
+          {result.note && <p className="text-xs text-warning">{result.note}</p>}
+          <EmailHealthView health={result.health} />
+        </>
+      )}
     </div>
   );
 }

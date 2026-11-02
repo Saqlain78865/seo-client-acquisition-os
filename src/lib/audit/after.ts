@@ -72,6 +72,8 @@ export async function afterAudit(auditId: string) {
 
     if (ok) {
       await autoKeywords(audit).catch((e) => log.info("keyword research failed", { auditId, reason: (e as Error).message }));
+      // Website technology and email health, for the pitch notes on the prospect page.
+      await import("../site-profile").then((m) => m.checkProspectProfile(audit.workspaceId, audit.prospectId)).catch((e) => log.info("technology check failed", { auditId, reason: (e as Error).message }));
     }
 
     // With a working Places key, the business profile is refreshed so the proposal can include it.

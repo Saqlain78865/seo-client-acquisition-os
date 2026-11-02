@@ -6,7 +6,7 @@ import { googleClient, redirectUri } from "@/lib/messaging/google-oauth";
 import { formatDate } from "@/lib/utils";
 import { Alert, Badge, Card, CardHeader, buttonClass } from "@/components/ui";
 import { RefreshOnFocus } from "@/components/refresh-on-focus";
-import { ApiKeyForm, ConnectionButtons, DriveBackupNow, GmailSmtpForm, GoogleAppForm, SmtpForm } from "./cards";
+import { ApiKeyForm, ConnectionButtons, DriveBackupNow, OwnEmailHealth, GmailSmtpForm, GoogleAppForm, SmtpForm } from "./cards";
 
 export const metadata: Metadata = { title: "Integrations" };
 
@@ -151,6 +151,14 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           <SmtpForm connected={c.SMTP.hasSecret} config={c.SMTP.config} disabled={!canEdit} />
         </IntegrationCard>
       </div>
+
+      {anyEmail && canEdit && (
+        <Card className="mt-4 p-5">
+          <p className="mb-1 font-medium">Email deliverability</p>
+          <p className="mb-3 text-xs text-muted">Checks SPF, DKIM and DMARC of the domain you send from — missing records are the main reason proposals land in spam.</p>
+          <OwnEmailHealth />
+        </Card>
+      )}
 
       <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-muted">Google sign-in and Search Console</h2>
       <div className="grid gap-4 lg:grid-cols-2">

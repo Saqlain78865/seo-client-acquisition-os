@@ -45,7 +45,7 @@ export function Finder({ googleReady }: { googleReady: boolean }) {
           {(
             [
               ["OSM", "OpenStreetMap — free, no card", true],
-              ["GOOGLE", googleReady ? "Google Places — ratings & reviews" : "Google Places — needs a key with billing", googleReady],
+              ["GOOGLE", googleReady ? "Google Places — ratings & reviews" : "Google Places — not available (see above)", googleReady],
             ] as const
           ).map(([key, label, ok]) => (
             <button

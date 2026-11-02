@@ -19,6 +19,9 @@ import { OptOut } from "./opt-out";
 import { KickoffChecklist } from "./kickoff";
 import { TrackingCard } from "./tracking-card";
 import { VideoCard } from "./video-card";
+import { ProfileCard } from "./profile-card";
+import { emailPitch, type EmailHealth } from "@/lib/email-health";
+import type { TechStack } from "@/lib/tech-stack";
 import { CHANGE_LABELS, type ChangeKind } from "@/lib/site-changes";
 import { createProposalAction } from "../../proposals/actions";
 
@@ -185,6 +188,14 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
               )}
             </Card>
           </div>
+
+          <ProfileCard
+            prospectId={p.id}
+            tech={(p.techStack as TechStack | null) ?? null}
+            email={(p.emailHealth as EmailHealth | null) ?? null}
+            pitch={[...((p.techStack as TechStack | null)?.pitch ?? []), ...(p.emailHealth ? emailPitch(p.emailHealth as EmailHealth) : [])]}
+            checkedAt={p.techCheckedAt?.toISOString() ?? null}
+          />
 
           <VideoCard
             prospectId={p.id}

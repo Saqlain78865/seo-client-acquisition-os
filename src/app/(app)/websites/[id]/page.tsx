@@ -19,6 +19,8 @@ import { WebsiteChanges } from "./changes";
 import { Alerts, InternalLinks, KeywordTracking, ReportEmail } from "./monitoring";
 import { CompetitorWatch, SiteHealth } from "./health";
 import { LinkAudit, SearchAnalysis } from "./analysis";
+import { ContentCalendar } from "./content-calendar";
+import { latestContentPlan } from "@/lib/content-calendar";
 import { indexSummary } from "@/lib/site-health";
 import { MAX_COMPETITORS, competitorActivity } from "@/lib/competitor-watch";
 import { MAX_KEYWORDS, trackedKeywords } from "@/lib/rank-tracking";
@@ -54,7 +56,7 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
   const session = await requireSession();
   const w = await getWebsite(session.workspace.id, id);
   if (!w) notFound();
-  const [gsc, changes, work, keywords, alerts, deliveries, gmail, index, rivals] = await Promise.all([
+  const [gsc, changes, work, keywords, alerts, deliveries, gmail, index, rivals, plan] = await Promise.all([
     db.integrationConnection.findFirst({ where: { workspaceId: session.workspace.id, provider: "SEARCH_CONSOLE", status: "CONNECTED", encryptedSecret: { not: null } }, select: { accountLabel: true } }),
     db.siteChange.findMany({ where: { websiteId: w.id, workspaceId: session.workspace.id }, orderBy: { detectedAt: "desc" }, take: 60 }),
     monthWork(session.workspace.id, w.id, month),
@@ -64,6 +66,7 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
     resolveSender(session.workspace.id).then((s) => !!s),
     indexSummary(session.workspace.id, w.id),
     competitorActivity(session.workspace.id, w.id, month),
+    latestContentPlan(session.workspace.id, w.id),
   ]);
   const linked = w.gscSiteUrl && propertyMatches(w.gscSiteUrl, w.domain) ? w.gscSiteUrl : null;
 
@@ -158,6 +161,14 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
 
       <div className="mb-6">
         <CompetitorWatch websiteId={w.id} monthLabel={monthLabel(month)} max={MAX_COMPETITORS} competitors={rivals.map((c) => ({ ...c, checkedAt: c.checkedAt?.toISOString() ?? null }))} />
+      </div>
+
+      <div className="mb-6">
+        <ContentCalendar
+          websiteId={w.id}
+          linked={!!linked}
+          plan={plan ? { source: plan.source, createdAt: plan.createdAt.toISOString(), items: plan.items.map((i) => ({ id: i.id, month: i.month, title: i.title, keyword: i.keyword, kind: i.kind, reason: i.reason, linkTo: i.linkTo, status: i.status })) } : null}
+        />
       </div>
 
       <div className="mb-6">

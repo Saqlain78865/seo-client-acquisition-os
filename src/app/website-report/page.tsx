@@ -15,6 +15,7 @@ import { readReportLink } from "@/lib/report-delivery";
 import { indexSummary } from "@/lib/site-health";
 import { competitorActivity } from "@/lib/competitor-watch";
 import { contentDecay, type DecayingPage } from "@/lib/gsc-analysis";
+import { latestContentPlan, PLAN_KINDS, type PlanKind } from "@/lib/content-calendar";
 
 export const metadata: Metadata = { title: "Monthly SEO report", robots: { index: false } };
 
@@ -144,6 +145,8 @@ export default async function WebsiteReportPage({ searchParams }: { searchParams
     indexSummary(session.workspace.id, w.id),
     competitorActivity(session.workspace.id, w.id, month),
   ]);
+  // Topics planned for the month after the report.
+  const nextTopics = ((await latestContentPlan(session.workspace.id, w.id))?.items ?? []).filter((i) => i.month === shiftMonth(month, 1) && i.status !== "SKIPPED");
   const rivalsActive = rivals.filter((c) => c.newPages.length || c.titleChanges.length || c.contentUpdates);
   let gsc: Awaited<ReturnType<typeof monthReport>> | null = null;
   let gscError: string | null = null;
@@ -554,6 +557,27 @@ export default async function WebsiteReportPage({ searchParams }: { searchParams
               ))}
             </tbody>
           </table>
+        </Slide>
+      )}
+
+      {/* Content planned for next month */}
+      {nextTopics.length > 0 && (
+        <Slide title={`Content for ${monthLabel(shiftMonth(month, 1))}`} kicker="From the 12-month content calendar" icon={<Lightbulb className="h-5 w-5" />} brand={brand}>
+          <ol className="space-y-3">
+            {nextTopics.map((t, i) => (
+              <li key={t.id} className="flex gap-3">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-sm font-bold text-white" style={{ background: brand }}>
+                  {i + 1}
+                </span>
+                <div>
+                  <p className="font-semibold">{t.title}</p>
+                  <p className="text-sm text-[#475569]">
+                    {PLAN_KINDS[t.kind as PlanKind] ?? t.kind} · “{t.keyword}” — {t.reason}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </Slide>
       )}
 

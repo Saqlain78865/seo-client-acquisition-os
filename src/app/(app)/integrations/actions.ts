@@ -194,3 +194,23 @@ export async function driveBackupNowAction(): Promise<IntegrationState> {
     return fail(e);
   }
 }
+
+/** SPF, DKIM and DMARC of the domain the app sends email from. */
+export async function ownEmailHealthAction(): Promise<{ ok: true; health: import("@/lib/email-health").EmailHealth; note: string | null } | { ok: false; error: string }> {
+  try {
+    const session = await requireRole("ADMIN");
+    const { resolveSender } = await import("@/lib/messaging/email");
+    const { checkEmailHealth } = await import("@/lib/email-health");
+    const sender = await resolveSender(session.workspace.id);
+    const domain = sender?.from.split("@")[1]?.toLowerCase();
+    if (!domain) return { ok: false, error: "Connect an email account first — its domain is what gets checked." };
+    const free = /^(gmail|googlemail|yahoo|hotmail|outlook|live|icloud)\.com$/.test(domain);
+    return {
+      ok: true,
+      health: await checkEmailHealth(domain),
+      note: free ? `You send from a free ${domain} address: Google/Microsoft manage its SPF and DKIM, and you cannot add your own DMARC. Sending from your own business domain looks more professional and lands in the inbox more often.` : null,
+    };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}

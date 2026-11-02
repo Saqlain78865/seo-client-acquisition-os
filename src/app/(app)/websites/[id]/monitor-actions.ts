@@ -151,3 +151,24 @@ export async function gscAnalysisAction(websiteId: string, kind: "cannibalizatio
     return fail(e);
   }
 }
+
+export async function createContentPlanAction(websiteId: string) {
+  return run(websiteId, async (ws) => {
+    const { ContentPlanError, createContentPlan } = await import("@/lib/content-calendar");
+    try {
+      const plan = await createContentPlan(ws, websiteId);
+      return { items: plan.items.length, source: plan.source };
+    } catch (e) {
+      if (e instanceof ContentPlanError) throw new RankError(e.message);
+      throw e;
+    }
+  });
+}
+
+export async function setPlanItemAction(websiteId: string, itemId: string, status: "PLANNED" | "DONE" | "SKIPPED") {
+  return run(websiteId, async (ws) => {
+    const { setPlanItemStatus } = await import("@/lib/content-calendar");
+    await setPlanItemStatus(ws, itemId, status);
+    return {};
+  });
+}
