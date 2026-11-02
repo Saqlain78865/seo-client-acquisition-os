@@ -12,17 +12,17 @@ export default async function ProspectFinderPage() {
   const ready = !!(await getApiKey(session.workspace.id, "PLACES"));
   return (
     <>
-      <PageHeader title="Prospect Finder" description="Search Google Maps businesses by type and city — the weakest profiles (no website, low rating, few reviews) come first. Uses the official Places API with your own key." />
+      <PageHeader title="Prospect Finder" description="Find local businesses by type and city — the weakest ones (no website, low rating, few reviews) come first. Free with OpenStreetMap; Google ratings and reviews with your own Places API key." />
       {!ready && (
-        <Alert tone="warning" className="mb-6" title="A Places API key is needed">
-          Add a Google key with “Places API (New)” enabled on the{" "}
+        <Alert tone="info" className="mb-6" title="Searching OpenStreetMap (free)">
+          For Google ratings and review counts, add a Google key with “Places API (New)” on the{" "}
           <Link href="/integrations" className="font-medium underline">
             Integrations page
-          </Link>
-          . Google gives a free monthly allowance; a billing account must be linked to the Google Cloud project.
+          </Link>{" "}
+          (Google needs a billing account on the project).
         </Alert>
       )}
-      <Finder disabled={!ready} />
+      <Finder googleReady={ready} />
     </>
   );
 }

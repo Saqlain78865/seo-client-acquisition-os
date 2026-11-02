@@ -162,3 +162,12 @@ export async function mapsGridAction(prospectId: string, input: { query: string;
     return `Checked ${s.total} points: top 3 at ${s.top3}, not in the top 20 at ${s.missing}`;
   });
 }
+
+/** Competitors copied by hand from Google Maps, for the proposal comparison. */
+export async function saveCompetitorsAction(prospectId: string, input: import("@/lib/research/places-service").ManualCompetitors) {
+  return run(prospectId, async (ws, userId) => {
+    const { saveManualCompetitors } = await import("@/lib/research/places-service");
+    const n = await saveManualCompetitors(ws, userId, prospectId, input);
+    return n ? `${n} competitor${n === 1 ? "" : "s"} saved — the proposal will compare reviews and ratings` : "Competitors cleared";
+  });
+}

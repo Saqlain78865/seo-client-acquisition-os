@@ -10,7 +10,8 @@ import { addFoundAction, findProspectsAction } from "./actions";
 
 type Found = FoundBusiness & { prospectId: string | null };
 
-export function Finder({ disabled }: { disabled: boolean }) {
+export function Finder({ googleReady }: { googleReady: boolean }) {
+  const [source, setSource] = useState<"OSM" | "GOOGLE">("OSM");
   const [query, setQuery] = useState("");
   const [searched, setSearched] = useState("");
   const [results, setResults] = useState<Found[] | null>(null);
@@ -20,7 +21,7 @@ export function Finder({ disabled }: { disabled: boolean }) {
 
   const search = () =>
     start(async () => {
-      const r = await findProspectsAction(query);
+      const r = await findProspectsAction(query, source);
       if (!r.ok) return void toast.error(r.error);
       setResults(r.results);
       setSearched(query);
@@ -40,6 +41,29 @@ export function Finder({ disabled }: { disabled: boolean }) {
   return (
     <div className="space-y-4">
       <Card className="p-4">
+        <div className="mb-3 flex flex-wrap gap-2 text-sm" role="radiogroup" aria-label="Where to search">
+          {(
+            [
+              ["OSM", "OpenStreetMap — free, no card", true],
+              ["GOOGLE", googleReady ? "Google Places — ratings & reviews" : "Google Places — needs a key with billing", googleReady],
+            ] as const
+          ).map(([key, label, ok]) => (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={source === key}
+              disabled={!ok}
+              onClick={() => {
+                setSource(key);
+                setResults(null);
+              }}
+              className={`rounded-full border px-3 py-1 text-xs disabled:opacity-50 ${source === key ? "border-primary bg-primary-soft text-primary" : "border-border hover:border-primary/40"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <form
           className="flex flex-col gap-2 sm:flex-row"
           onSubmit={(e) => {
@@ -48,13 +72,18 @@ export function Finder({ disabled }: { disabled: boolean }) {
           }}
         >
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="dentist Dubai, plumber Manchester, thai restaurant Brooklyn…" aria-label="Business type and city" className="sm:flex-1" />
-          <Button type="submit" disabled={disabled || pending || query.trim().length < 3}>
+          <Button type="submit" disabled={pending || query.trim().length < 3}>
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Find businesses
           </Button>
         </form>
-        <p className="mt-2 text-xs text-muted">Each search is one Places API request (up to 20 businesses). Google&apos;s free monthly allowance for this kind of search is about 1,000 requests.</p>
+        <p className="mt-2 text-xs text-muted">
+          {source === "OSM"
+            ? "Type the business and the city (“dentist Karachi”). OpenStreetMap lists names, phones and websites but no Google ratings — businesses without a website come first. Check their Google profile with the Maps link — OpenStreetMap can miss a website, so confirm before pitching."
+            : "Each search is one Places API request (up to 20 businesses). Google's free monthly allowance for this kind of search is about 1,000 requests."}
+        </p>
       </Card>
 
+      {results && source === "OSM" && <p className="text-xs text-muted">Map data © OpenStreetMap contributors (ODbL).</p>}
       {results && (
         <div className="flex items-center justify-between text-sm">
           <p className="text-muted">
@@ -80,11 +109,13 @@ export function Finder({ disabled }: { disabled: boolean }) {
                 <p className="truncate font-semibold">{b.name}</p>
                 <p className="truncate text-xs text-muted">{[b.category, b.address].filter(Boolean).join(" · ")}</p>
               </div>
-              <span className="flex shrink-0 items-center gap-1 text-sm font-medium">
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                {b.rating != null ? b.rating.toFixed(1) : "—"}
-                <span className="text-xs font-normal text-muted">({b.reviewCount})</span>
-              </span>
+              {b.source !== "OSM" && (
+                <span className="flex shrink-0 items-center gap-1 text-sm font-medium">
+                  <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                  {b.rating != null ? b.rating.toFixed(1) : "—"}
+                  <span className="text-xs font-normal text-muted">({b.reviewCount})</span>
+                </span>
+              )}
             </div>
             {b.weaknesses.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -108,7 +139,7 @@ export function Finder({ disabled }: { disabled: boolean }) {
               )}
               {b.mapsUrl && (
                 <a href={b.mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:text-primary">
-                  <MapPin className="h-3.5 w-3.5" /> Google Maps <ExternalLink className="h-3 w-3" />
+                  <MapPin className="h-3.5 w-3.5" /> {b.source === "OSM" ? "Find on Google Maps" : "Google Maps"} <ExternalLink className="h-3 w-3" />
                 </a>
               )}
             </div>

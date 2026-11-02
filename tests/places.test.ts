@@ -4,7 +4,8 @@ import { createWorkspace } from "@/lib/workspace";
 import { saveCredentials } from "@/lib/integrations";
 import { rankingsAndCompetitors } from "@/lib/research/gbp";
 import { competitorGap, findBusinesses, gridPoints, gridSummary, scanGrid, weaknessesOf } from "@/lib/research/places-tools";
-import { addFoundBusiness, findProspects, scanMapsGrid } from "@/lib/research/places-service";
+import { addFoundBusiness, findProspects, saveManualCompetitors, scanMapsGrid } from "@/lib/research/places-service";
+import { overpassQuery, splitQuery, toBusinesses } from "@/lib/research/osm-finder";
 import { competitorLines } from "@/lib/proposals/generate";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -104,5 +105,60 @@ describe("Places API features (fake Google)", () => {
     const { proposalGbp } = await import("@/lib/proposals/service");
     const { gbp } = await proposalGbp(prospect.id, "me.example");
     expect(gbp?.grid).toMatchObject({ query: "dentist", size: 3, positions: [1, 1, 1, 1, 1, 1, 1, 1, 1] });
+  });
+
+  it("finds businesses on OpenStreetMap without any key, those without a website first", async () => {
+    expect(splitQuery("dentist Karachi")).toEqual({ what: "dentist", where: "Karachi" });
+    expect(splitQuery("dental clinic in Dubai Marina")).toEqual({ what: "dental clinic", where: "Dubai Marina" });
+    expect(splitQuery("thai restaurant brooklyn")).toEqual({ what: "thai restaurant", where: "brooklyn" });
+    expect(overpassQuery("dentist", [1, 2, 3, 4])).toContain('nwr["amenity"="dentist"](1,2,3,4);');
+    const list = toBusinesses([
+      { type: "node", id: 1, lat: 24.8, lon: 67, tags: { name: "Smile Care", amenity: "dentist", website: "smilecare.example", phone: "+92 21 111" } },
+      { type: "way", id: 2, center: { lat: 24.9, lon: 67.1 }, tags: { name: "Dr Ali Dental", amenity: "dentist" } },
+      { type: "node", id: 3, tags: { amenity: "dentist" } },
+    ]);
+    expect(list.map((b) => [b.name, b.weaknesses])).toEqual([
+      ["Dr Ali Dental", ["No website on OpenStreetMap", "No phone on OpenStreetMap"]],
+      ["Smile Care", []],
+    ]);
+    expect(list[1].website).toBe("https://smilecare.example");
+
+    const user = await db.user.create({ data: { email: `osm${Date.now()}@test.example`, name: "O", passwordHash: "x" } });
+    const ws = await createWorkspace("OSM WS", user.id);
+    const urls: string[] = [];
+    const fake = (async (url: string) => {
+      urls.push(url);
+      if (url.includes("nominatim")) return json([{ display_name: "Karachi, Pakistan", boundingbox: ["24.7", "25.1", "66.8", "67.3"] }]);
+      return json({ elements: [{ type: "node", id: 9, lat: 24.9, lon: 67, tags: { name: "Dr Ali Dental", amenity: "dentist", phone: "+92 300 1" } }] });
+    }) as unknown as typeof fetch;
+    // No Places key is needed for OpenStreetMap.
+    const [found] = await findProspects(ws.id, "dentist Karachi", fake, "OSM");
+    expect(urls).toHaveLength(2);
+    expect(found).toMatchObject({ name: "Dr Ali Dental", source: "OSM", prospectId: null });
+    const r = await addFoundBusiness(ws.id, user.id, found, "dentist Karachi");
+    const p = await db.prospect.findUniqueOrThrow({ where: { id: r.prospectId } });
+    expect(p).toMatchObject({ city: "Karachi", leadSource: "Prospect Finder (OpenStreetMap)" });
+    expect(p.websiteUrl.startsWith("https://www.google.com/maps/search/")).toBe(true);
+    expect(await db.gbpProfile.count({ where: { prospectId: p.id } })).toBe(0);
+    expect((await addFoundBusiness(ws.id, user.id, found, "dentist Karachi")).created).toBe(false);
+  });
+
+  it("saves competitors entered by hand and shows them in the proposal", async () => {
+    const user = await db.user.create({ data: { email: `mc${Date.now()}@test.example`, name: "M", passwordHash: "x" } });
+    const ws = await createWorkspace("MC WS", user.id);
+    const prospect = await db.prospect.create({ data: { workspaceId: ws.id, businessName: "Me", websiteUrl: "https://me.example/", domain: "me.example" } });
+    const input = { query: "dentist karachi", ownPosition: 6, competitors: [{ name: "Leader", rating: 4.9, reviewCount: 210, position: null }, { name: "Second", rating: 4.6, reviewCount: 90, position: 2 }, { name: "", rating: null, reviewCount: 0, position: null }] };
+    await expect(saveManualCompetitors(ws.id, user.id, prospect.id, input)).rejects.toThrow(/own Google profile first/);
+    await db.gbpProfile.create({ data: { workspaceId: ws.id, prospectId: prospect.id, source: "MANUAL", name: "Me", rating: 4.2, reviewCount: 18, reviews: [], rankings: [] } });
+    await expect(saveManualCompetitors(ws.id, user.id, prospect.id, { ...input, competitors: [{ name: "X", rating: 7, reviewCount: 1, position: null }] })).rejects.toThrow(/between 1 and 5/);
+    expect(await saveManualCompetitors(ws.id, user.id, prospect.id, input)).toBe(2);
+    const { proposalGbp } = await import("@/lib/proposals/service");
+    const { gbp } = await proposalGbp(prospect.id, "me.example");
+    expect(gbp?.competitors?.map((c) => [c.name, c.reviewCount, c.position])).toEqual([
+      ["Leader", 210, 1],
+      ["Second", 90, 2],
+    ]);
+    expect(gbp?.rankings[0]).toMatchObject({ query: "dentist karachi", position: 6 });
+    expect(competitorLines("Me", gbp!)[0]).toMatch(/Me has 18 Google reviews; the top 2 businesses .* have 150 on average/);
   });
 });

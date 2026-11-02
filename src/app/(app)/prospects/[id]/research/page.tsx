@@ -16,6 +16,7 @@ import { getApiKey } from "@/lib/integrations";
 import { defaultGbpQueries, gbpRowToData, latestGbp } from "@/lib/research/service";
 import { GbpPanel } from "./gbp-panel";
 import { MapsGrid } from "./maps-grid";
+import { CompetitorsForm } from "./competitors-form";
 import { latestGridScan } from "@/lib/research/places-service";
 
 export const metadata: Metadata = { title: "Research" };
@@ -88,6 +89,24 @@ export default async function ResearchPage({ params, searchParams }: { params: P
           placesReady={!!(await getApiKey(session.workspace.id, "PLACES"))}
           defaultQueries={await defaultGbpQueries(session.workspace.id, id)}
         />
+      )}
+      {tab === "gbp" && (
+        <div className="mt-6">
+          <CompetitorsForm
+            prospectId={id}
+            hasProfile={!!gbpRow}
+            defaultQuery={(await defaultGbpQueries(session.workspace.id, id))[0] ?? ""}
+            current={
+              gbpRow && Array.isArray(gbpRow.competitors) && gbpRow.competitors.length
+                ? {
+                    query: ((gbpRow.rankings as { query: string; position: number | null }[] | null) ?? [])[0]?.query ?? "",
+                    ownPosition: ((gbpRow.rankings as { query: string; position: number | null }[] | null) ?? [])[0]?.position ?? null,
+                    competitors: gbpRow.competitors as { name: string; rating: number | null; reviewCount: number; position: number }[],
+                  }
+                : null
+            }
+          />
+        </div>
       )}
       {tab === "gbp" && (
         <div className="mt-6">

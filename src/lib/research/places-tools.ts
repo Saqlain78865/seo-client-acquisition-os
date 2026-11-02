@@ -20,6 +20,8 @@ export type FoundBusiness = {
   /** Why the profile looks weak, strongest reason first. */
   weaknesses: string[];
   score: number;
+  /** Where the business came from: Google Places (ratings and reviews) or OpenStreetMap (free, no ratings). */
+  source?: "GOOGLE" | "OSM";
 };
 
 type FoundPlace = {
@@ -80,7 +82,7 @@ export async function findBusinesses(apiKey: string, query: string, fetchImpl: t
         lat: p.location?.latitude ?? null,
         lng: p.location?.longitude ?? null,
       };
-      return { ...base, ...weaknessesOf(base) };
+      return { ...base, ...weaknessesOf(base), source: "GOOGLE" as const };
     })
     .sort((a, b) => b.score - a.score);
 }

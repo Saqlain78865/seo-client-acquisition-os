@@ -14,10 +14,10 @@ async function fail(e: unknown): Promise<{ ok: false; error: string }> {
   return { ok: false, error: withReference("Something went wrong. Please try again.", await reportError("prospect-finder", e)) };
 }
 
-export async function findProspectsAction(query: string): Promise<{ ok: true; results: Found[] } | { ok: false; error: string }> {
+export async function findProspectsAction(query: string, source: "GOOGLE" | "OSM" = "GOOGLE"): Promise<{ ok: true; results: Found[] } | { ok: false; error: string }> {
   const session = await requireSession();
   try {
-    return { ok: true, results: await findProspects(session.workspace.id, query) };
+    return { ok: true, results: await findProspects(session.workspace.id, query, undefined, source === "OSM" ? "OSM" : "GOOGLE") };
   } catch (e) {
     return fail(e);
   }

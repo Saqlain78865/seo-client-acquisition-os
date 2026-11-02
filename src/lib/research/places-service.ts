@@ -7,6 +7,7 @@ import { normalizeDomain, normalizeWebsiteUrl } from "../url";
 import { GbpError, places } from "./gbp";
 import { findBusinesses, gridSummary, scanGrid, type FoundBusiness, type GridPoint } from "./places-tools";
 import { ResearchError, saveGbp } from "./service";
+import { OsmError, findOsmBusinesses, splitQuery } from "./osm-finder";
 
 /** Workspace actions on top of the Places tools: find prospects, add them, scan the Maps grid. */
 
@@ -26,20 +27,32 @@ const wrap = async <T>(fn: () => Promise<T>) => {
 };
 
 /** Businesses for a search, weakest profiles first, marked when they are already prospects. */
-export async function findProspects(workspaceId: string, query: string, fetchImpl?: typeof fetch) {
+export async function findProspects(workspaceId: string, query: string, fetchImpl?: typeof fetch, source: "GOOGLE" | "OSM" = "GOOGLE") {
   const q = query.trim().slice(0, 120);
   if (q.length < 3) throw new ResearchError("Type a business type and a city, e.g. “dentist Dubai”.");
-  const key = await placesKey(workspaceId);
-  const found = await wrap(() => findBusinesses(key, q, fetchImpl));
+  let found: FoundBusiness[];
+  if (source === "OSM") {
+    try {
+      found = (await findOsmBusinesses(q, fetchImpl)).results;
+    } catch (e) {
+      if (e instanceof OsmError) throw new ResearchError(e.message);
+      throw e;
+    }
+  } else {
+    const key = await placesKey(workspaceId);
+    found = await wrap(() => findBusinesses(key, q, fetchImpl));
+  }
   const domains = found.map((b) => (b.website ? normalizeDomain(normalizeWebsiteUrl(b.website)) : null)).filter((d): d is string => !!d);
   const placeIds = found.map((b) => b.placeId);
   const [byDomain, byPlace] = await Promise.all([
     db.prospect.findMany({ where: { workspaceId, domain: { in: domains } }, select: { id: true, domain: true } }),
     db.gbpProfile.findMany({ where: { workspaceId, placeId: { in: placeIds } }, select: { prospectId: true, placeId: true } }),
   ]);
+  const byName = await db.prospect.findMany({ where: { workspaceId, businessName: { in: found.map((b) => b.name) } }, select: { id: true, businessName: true } });
   const domainMap = new Map(byDomain.map((p) => [p.domain, p.id]));
   const placeMap = new Map(byPlace.map((p) => [p.placeId, p.prospectId]));
-  return found.map((b) => ({ ...b, prospectId: placeMap.get(b.placeId) ?? (b.website ? (domainMap.get(normalizeDomain(normalizeWebsiteUrl(b.website))) ?? null) : null) }));
+  const nameMap = new Map(byName.map((p) => [p.businessName, p.id]));
+  return found.map((b) => ({ ...b, prospectId: placeMap.get(b.placeId) ?? (b.website ? (domainMap.get(normalizeDomain(normalizeWebsiteUrl(b.website))) ?? null) : null) ?? (b.source === "OSM" ? (nameMap.get(b.name) ?? null) : null) }));
 }
 
 /** Adds a found business as a prospect, with its Google profile figures saved for the proposal. */
@@ -63,8 +76,27 @@ export async function addFoundBusiness(workspaceId: string, userId: string, foun
     lng: num(found.lng),
     weaknesses: Array.isArray(found.weaknesses) ? found.weaknesses.filter((w) => typeof w === "string").slice(0, 5).map((w) => w.slice(0, 80)) : [],
     score: 0,
+    source: found.source === "OSM" ? "OSM" : "GOOGLE",
   };
   query = query.slice(0, 120);
+  if (b.source === "OSM") {
+    // OpenStreetMap has no Google profile data: the prospect is added with what the map lists.
+    const same = await db.prospect.findFirst({ where: { workspaceId, businessName: b.name }, select: { id: true } });
+    if (same) return { prospectId: same.id, created: false };
+    const settings = await db.workspaceSettings.findUnique({ where: { workspaceId }, select: { defaultCurrency: true } });
+    const prospect = await createProspect(workspaceId, userId, {
+      businessName: b.name,
+      // No website: a Google Maps search for the business stands in (it is never crawled).
+      websiteUrl: b.website ?? b.mapsUrl ?? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.name)}`,
+      city: splitQuery(query).where || undefined,
+      industry: b.category ?? undefined,
+      leadSource: "Prospect Finder (OpenStreetMap)",
+      notes: [`Found with “${query}” on OpenStreetMap.`, b.address ? `Address: ${b.address}.` : "", ...b.weaknesses].filter(Boolean).join(" "),
+      currency: settings?.defaultCurrency ?? "USD",
+      phone: b.phone ?? undefined,
+    });
+    return { prospectId: prospect.id, created: true };
+  }
   const exists = await db.gbpProfile.findFirst({ where: { workspaceId, placeId: b.placeId }, select: { prospectId: true } });
   if (exists) return { prospectId: exists.prospectId, created: false };
   const settings = await db.workspaceSettings.findUnique({ where: { workspaceId }, select: { defaultCurrency: true } });
@@ -129,4 +161,34 @@ export async function scanMapsGrid(workspaceId: string, userId: string, prospect
 export async function latestGridScan(workspaceId: string, prospectId: string) {
   const s = await db.mapsGridScan.findFirst({ where: { workspaceId, prospectId }, orderBy: { createdAt: "desc" } });
   return s ? { ...s, points: s.points as GridPoint[] } : null;
+}
+
+export type ManualCompetitors = { query: string; ownPosition: number | null; competitors: { name: string; rating: number | null; reviewCount: number; position: number | null }[] };
+
+/**
+ * Competitors copied by hand from Google Maps (when there is no Places key): the top businesses
+ * for one search, saved on the latest profile so the proposal can compare reviews and ratings.
+ */
+export async function saveManualCompetitors(workspaceId: string, userId: string, prospectId: string, input: ManualCompetitors) {
+  const gbp = await db.gbpProfile.findFirst({ where: { workspaceId, prospectId }, orderBy: { fetchedAt: "desc" } });
+  if (!gbp) throw new ResearchError("Add the business's own Google profile first (the form above), then its competitors.");
+  const query = input.query.trim().slice(0, 120);
+  if (query.length < 3) throw new ResearchError("Enter the Google Maps search you checked, e.g. “dentist karachi”.");
+  const list = input.competitors
+    .filter((c) => c.name.trim())
+    .slice(0, 3)
+    .map((c, i) => {
+      if (c.rating != null && (!Number.isFinite(c.rating) || c.rating < 1 || c.rating > 5)) throw new ResearchError(`Rating of ${c.name} must be between 1 and 5.`);
+      if (!Number.isInteger(c.reviewCount) || c.reviewCount < 0 || c.reviewCount > 1_000_000) throw new ResearchError(`Enter the number of reviews of ${c.name}.`);
+      const position = c.position != null && Number.isInteger(c.position) && c.position >= 1 && c.position <= 20 ? c.position : i + 1;
+      return { name: c.name.trim().slice(0, 120), rating: c.rating, reviewCount: c.reviewCount, position, website: null };
+    });
+  const own = input.ownPosition != null && Number.isInteger(input.ownPosition) && input.ownPosition >= 1 && input.ownPosition <= 20 ? input.ownPosition : null;
+  const rankings = ((gbp.rankings as { query: string; position: number | null; total: number; checkedAt: string }[] | null) ?? []).filter((r) => r.query.toLowerCase() !== query.toLowerCase());
+  await db.gbpProfile.update({
+    where: { id: gbp.id },
+    data: { competitors: list as object, rankings: [{ query, position: own, total: 20, checkedAt: new Date().toISOString() }, ...rankings].slice(0, 5) as object },
+  });
+  await logActivity({ workspaceId, prospectId, userId, type: "research.competitors_saved", message: `${list.length} Google Maps competitor${list.length === 1 ? "" : "s"} entered for “${query}”` });
+  return list.length;
 }
