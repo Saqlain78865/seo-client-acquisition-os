@@ -11,11 +11,14 @@ import { internalLinkSuggestions } from "@/lib/internal-links-run";
 import type { LinkSuggestion } from "@/lib/internal-links";
 import { db } from "@/lib/db";
 import { monthKey, shiftMonth } from "@/lib/client-work";
+import { CompetitorWatchError, addWatchedCompetitor, checkCompetitorNow, removeWatchedCompetitor } from "@/lib/competitor-watch";
+import { checkRobotsAndSitemap, runIndexCheck } from "@/lib/site-health";
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 async function fail(e: unknown): Promise<{ ok: false; error: string }> {
-  if (e instanceof GscError || e instanceof RankError || e instanceof ReportDeliveryError) return { ok: false, error: e.message };
+  if (e instanceof GscError || e instanceof RankError || e instanceof ReportDeliveryError || e instanceof CompetitorWatchError) return { ok: false, error: e.message };
+  if (e instanceof Error && /respond|Blocked|could not be found|not found|ENOTFOUND|timed out/i.test(e.message)) return { ok: false, error: e.message };
   return { ok: false, error: withReference("Something went wrong. Please try again.", await reportError("websites", e)) };
 }
 
@@ -92,4 +95,38 @@ export async function internalLinksAction(websiteId: string): Promise<R<{ pagesR
     if (e instanceof Error && /respond|Blocked|could not be found|not found/i.test(e.message)) return { ok: false, error: e.message };
     return fail(e);
   }
+}
+
+export async function addCompetitorAction(websiteId: string, input: { name: string; url: string }) {
+  return run(websiteId, async (ws) => {
+    const c = await addWatchedCompetitor(ws, websiteId, input);
+    // The first check records how the site looks today; changes are reported from the next one.
+    const r = await checkCompetitorNow(ws, c.id).catch(() => null);
+    return { pages: r?.pages ?? 0 };
+  });
+}
+
+export async function removeCompetitorAction(websiteId: string, id: string) {
+  return run(websiteId, async (ws) => (await removeWatchedCompetitor(ws, id), {}));
+}
+
+export async function checkCompetitorAction(websiteId: string, id: string) {
+  return run(websiteId, async (ws) => {
+    const r = await checkCompetitorNow(ws, id);
+    return { changes: r.changes, baseline: r.baseline };
+  });
+}
+
+export async function checkHealthAction(websiteId: string) {
+  return run(websiteId, async (ws) => {
+    const r = await checkRobotsAndSitemap(ws, websiteId);
+    return { problems: r?.problems ?? [], sitemapUrls: r?.sitemapUrls ?? 0 };
+  });
+}
+
+export async function checkIndexingAction(websiteId: string) {
+  return run(websiteId, async (ws) => {
+    const r = await runIndexCheck(ws, websiteId);
+    return { inspected: r?.inspected ?? 0, errors: r?.errors ?? 0 };
+  });
 }

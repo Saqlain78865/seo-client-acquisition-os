@@ -1158,9 +1158,10 @@ model GscDaily {
 /// The last seen state of one page of a tracked website, compared on every weekly check.
 model PageSnapshot {
   id              String   @id @default(cuid())
-  // Exactly one of prospectId (won client) or websiteId (My Websites) is set.
+  // Exactly one of prospectId (won client), websiteId (My Websites) or competitorId (a watched competitor) is set.
   prospectId      String?
   websiteId       String?
+  competitorId    String?
   url             String
   status          Int?
   title           String?
@@ -1172,30 +1173,35 @@ model PageSnapshot {
   contentHash     String?
   takenAt         DateTime @default(now())
 
-  prospect Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  website  Website?  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  prospect   Prospect?          @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  website    Website?           @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  competitor WatchedCompetitor? @relation(fields: [competitorId], references: [id], onDelete: Cascade)
 
   @@unique([prospectId, url])
   @@unique([websiteId, url])
+  @@unique([competitorId, url])
 }
 
 /// A change found on a tracked website: NEW_PAGE | REMOVED_PAGE | TITLE | META_DESCRIPTION | H1 | CONTENT | STATUS | CANONICAL | INDEXING
 model SiteChange {
-  id          String   @id @default(cuid())
-  workspaceId String
-  prospectId  String?
-  websiteId   String?
-  url         String
-  kind        String
-  before      String?
-  after       String?
-  detectedAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  workspaceId  String
+  prospectId   String?
+  websiteId    String?
+  competitorId String?
+  url          String
+  kind         String
+  before       String?
+  after        String?
+  detectedAt   DateTime @default(now())
 
-  prospect Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  website  Website?  @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  prospect   Prospect?          @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  website    Website?           @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  competitor WatchedCompetitor? @relation(fields: [competitorId], references: [id], onDelete: Cascade)
 
   @@index([prospectId, detectedAt])
   @@index([websiteId, detectedAt])
+  @@index([competitorId, detectedAt])
 }
 
 /// A website you run or manage (your blog, your own sites, sites clients gave you access to) — separate from prospects.
@@ -1221,15 +1227,23 @@ model Website {
   // Daily Search Console checks: tracked keyword positions and the traffic-drop alert.
   keywordsSyncedAt DateTime?
   trafficCheckedAt DateTime?
+  // Monthly Google indexing check (Search Console URL Inspection).
+  indexCheckedAt   DateTime?
+  // Daily robots.txt / sitemap check: the last robots.txt seen and URLs in the sitemaps.
+  robotsCheckedAt  DateTime?
+  robotsBody       String?
+  sitemapUrlCount  Int?
   createdAt        DateTime  @default(now())
 
-  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   pageSnapshots PageSnapshot[]
   siteChanges   SiteChange[]
   workLog       WorkLogEntry[]
   keywords      TrackedKeyword[]
   alerts        SiteAlert[]
   reports       ReportDelivery[]
+  competitors   WatchedCompetitor[]
+  indexStatuses IndexStatus[]
 
   @@unique([workspaceId, domain])
 }
@@ -1346,4 +1360,45 @@ model MapsGridScan {
   prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
   @@index([prospectId, createdAt])
+}
+
+/// A competitor's website watched every week for new pages, title changes and content updates.
+model WatchedCompetitor {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  websiteId        String
+  name             String
+  url              String
+  domain           String
+  changesCheckedAt DateTime?
+  createdAt        DateTime  @default(now())
+
+  website   Website        @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+  snapshots PageSnapshot[]
+  changes   SiteChange[]
+
+  @@unique([websiteId, domain])
+}
+
+/// Google's index status of one page (Search Console URL Inspection), refreshed monthly.
+model IndexStatus {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  websiteId       String
+  url             String
+  // PASS | PARTIAL | FAIL | NEUTRAL (Google's verdict)
+  verdict         String
+  // e.g. "Submitted and indexed", "Crawled - currently not indexed", "Discovered - currently not indexed"
+  coverageState   String?
+  robotsTxtState  String?
+  indexingState   String?
+  pageFetchState  String?
+  googleCanonical String?
+  userCanonical   String?
+  lastCrawlTime   DateTime?
+  checkedAt       DateTime  @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, url])
 }

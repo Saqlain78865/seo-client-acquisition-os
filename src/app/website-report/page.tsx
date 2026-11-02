@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowDownRight, ArrowLeft, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Lightbulb, Rocket, Search, Sparkles, Target, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowLeft, Binoculars, FileSearch, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Lightbulb, Rocket, Search, Sparkles, Target, TrendingUp } from "lucide-react";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isMonthKey, monthKey, monthLabel, shiftMonth } from "@/lib/client-work";
@@ -12,6 +12,8 @@ import { WORK_CATEGORIES, monthWork, type WorkCategory } from "@/lib/work-log";
 import { insights, type KeywordMove } from "@/lib/report-insights";
 import { PrintButton } from "../work-report/print-button";
 import { readReportLink } from "@/lib/report-delivery";
+import { indexSummary } from "@/lib/site-health";
+import { competitorActivity } from "@/lib/competitor-watch";
 
 export const metadata: Metadata = { title: "Monthly SEO report", robots: { index: false } };
 
@@ -135,7 +137,13 @@ export default async function WebsiteReportPage({ searchParams }: { searchParams
   if (!w) notFound();
   const settings = await db.workspaceSettings.findUnique({ where: { workspaceId: session.workspace.id }, select: { companyName: true, consultantName: true, brandColor: true } });
   const brand = settings?.brandColor || "#4f46e5";
-  const [changes, work] = await Promise.all([monthChanges(session.workspace.id, { websiteId: w.id }, month), monthWork(session.workspace.id, w.id, month)]);
+  const [changes, work, index, rivals] = await Promise.all([
+    monthChanges(session.workspace.id, { websiteId: w.id }, month),
+    monthWork(session.workspace.id, w.id, month),
+    indexSummary(session.workspace.id, w.id),
+    competitorActivity(session.workspace.id, w.id, month),
+  ]);
+  const rivalsActive = rivals.filter((c) => c.newPages.length || c.titleChanges.length || c.contentUpdates);
   let gsc: Awaited<ReturnType<typeof monthReport>> | null = null;
   let gscError: string | null = null;
   if (w.gscSiteUrl) {
@@ -440,6 +448,70 @@ export default async function WebsiteReportPage({ searchParams }: { searchParams
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+        </Slide>
+      )}
+
+      {/* Google indexing */}
+      {index.total > 0 && (
+        <Slide title="Pages in Google" kicker="Indexing, from Search Console" icon={<FileSearch className="h-5 w-5" />} brand={brand}>
+          <div className="flex flex-wrap items-end gap-6">
+            <p className="text-5xl font-extrabold tabular-nums" style={{ color: brand }}>
+              {index.indexed}
+              <span className="text-2xl font-semibold text-[#94a3b8]"> / {index.total}</span>
+            </p>
+            <p className="pb-2 text-[#475569]">pages checked are in Google&apos;s index{index.checkedAt ? ` (checked ${index.checkedAt.toLocaleDateString("en-GB", { day: "numeric", month: "long" })})` : ""}</p>
+          </div>
+          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#f1f5f9]">
+            <div className="h-full" style={{ width: `${(index.indexed / index.total) * 100}%`, background: brand }} />
+          </div>
+          {index.notIndexed.length > 0 ? (
+            <>
+              <p className="mt-6 mb-2 font-semibold">Not indexed yet, and why</p>
+              <ul className="space-y-1 text-sm">
+                {index.reasons.map((r) => (
+                  <li key={r.reason} className="flex justify-between border-b border-[#f1f5f9] pb-1">
+                    <span>{r.reason}</span>
+                    <b className="tabular-nums">{r.count}</b>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-[#64748b]">
+                Examples: {index.notIndexed.slice(0, 5).map((p) => path(p.url)).join(" · ")}
+              </p>
+            </>
+          ) : (
+            <p className="mt-6 text-[#16a34a]">Every page checked is in Google&apos;s index.</p>
+          )}
+        </Slide>
+      )}
+
+      {/* Competitors */}
+      {rivals.length > 0 && (
+        <Slide title="What competitors did" kicker={`${monthLabel(month)}, from the weekly check of their websites`} icon={<Binoculars className="h-5 w-5" />} brand={brand}>
+          {rivalsActive.length === 0 ? (
+            <p className="text-[#475569]">No changes were found on the watched competitor websites this month ({rivals.map((c) => c.domain).join(", ")}).</p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {rivals.map((c) => (
+                <div key={c.id} className="rounded-xl border border-[#e2e8f0] p-4">
+                  <p className="font-semibold">{c.name}</p>
+                  <p className="text-xs text-[#64748b]">{c.domain}</p>
+                  <p className="mt-2 text-sm">
+                    <b>{c.newPages.length}</b> new page{c.newPages.length === 1 ? "" : "s"} · <b>{c.titleChanges.length}</b> title{c.titleChanges.length === 1 ? "" : "s"} changed · <b>{c.contentUpdates}</b> page{c.contentUpdates === 1 ? "" : "s"} updated
+                  </p>
+                  {c.newPages.length > 0 && (
+                    <ul className="mt-2 space-y-0.5 text-xs text-[#475569]">
+                      {c.newPages.slice(0, 6).map((p) => (
+                        <li key={p.url} className="truncate">
+                          + {p.title || path(p.url)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </Slide>

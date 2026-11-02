@@ -69,9 +69,14 @@ export function compare(before: Snap, after: Snap): { kind: ChangeKind; before: 
 }
 
 /** Whose website is checked: a won client (prospect) or one of My Websites. */
-export type ChangeOwner = { prospectId: string } | { websiteId: string };
+export type ChangeOwner = { prospectId: string } | { websiteId: string } | { competitorId: string };
 
 async function ownerSite(workspaceId: string, owner: ChangeOwner) {
+  if ("competitorId" in owner) {
+    const c = await db.watchedCompetitor.findFirst({ where: { id: owner.competitorId, workspaceId }, select: { url: true } });
+    if (!c) throw new Error("Competitor not found.");
+    return c.url;
+  }
   if ("websiteId" in owner) {
     const w = await db.website.findFirst({ where: { id: owner.websiteId, workspaceId }, select: { url: true } });
     if (!w) throw new Error("Website not found.");
@@ -113,13 +118,18 @@ export async function checkSiteChanges(workspaceId: string, owner: ChangeOwner) 
     ...(changes.length ? [db.siteChange.createMany({ data: changes.map((c) => ({ workspaceId, ...owner, url: c.url, kind: c.kind, before: c.before?.slice(0, 500) ?? null, after: c.after?.slice(0, 500) ?? null })) })] : []),
     ...[...now.values()].map((s) =>
       db.pageSnapshot.upsert({
-        where: "websiteId" in owner ? { websiteId_url: { websiteId: owner.websiteId, url: s.url } } : { prospectId_url: { prospectId: owner.prospectId, url: s.url } },
+        where:
+          "competitorId" in owner
+            ? { competitorId_url: { competitorId: owner.competitorId, url: s.url } }
+            : "websiteId" in owner
+              ? { websiteId_url: { websiteId: owner.websiteId, url: s.url } }
+              : { prospectId_url: { prospectId: owner.prospectId, url: s.url } },
         create: { ...owner, ...s, takenAt: at },
         update: { ...s, takenAt: at },
       }),
     ),
     ...changes.filter((c) => c.kind === "REMOVED_PAGE").map((c) => db.pageSnapshot.deleteMany({ where: { ...owner, url: c.url } })),
-    "websiteId" in owner ? db.website.update({ where: { id: owner.websiteId }, data: { changesCheckedAt: at } }) : db.prospect.update({ where: { id: owner.prospectId }, data: { changesCheckedAt: at } }),
+    stamp(owner, at),
   ]);
   if ("websiteId" in owner) {
     const gone = changes.filter((c) => c.kind === "REMOVED_PAGE" || (c.kind === "STATUS" && Number(c.after) >= 400)).map((c) => ({ url: c.url, status: c.after }));
@@ -128,27 +138,33 @@ export async function checkSiteChanges(workspaceId: string, owner: ChangeOwner) 
   return { baseline, changes: changes.length, pages: now.size };
 }
 
+function stamp(owner: ChangeOwner, at: Date) {
+  if ("competitorId" in owner) return db.watchedCompetitor.update({ where: { id: owner.competitorId }, data: { changesCheckedAt: at } });
+  if ("websiteId" in owner) return db.website.update({ where: { id: owner.websiteId }, data: { changesCheckedAt: at } });
+  return db.prospect.update({ where: { id: owner.prospectId }, data: { changesCheckedAt: at } });
+}
+
 /**
- * Weekly checks for the websites being worked on: My Websites and won clients. A few per run, so
- * the app stays responsive.
+ * Weekly checks for the websites being worked on (My Websites and won clients) and the competitors
+ * watched for them. A few per run, so the app stays responsive.
  */
 export async function runWeeklyChangeChecks(now = new Date()) {
   const stale = { OR: [{ changesCheckedAt: null }, { changesCheckedAt: { lt: new Date(now.getTime() - 7 * DAY) } }] };
-  const [websites, clients] = await Promise.all([
+  const [websites, clients, competitors] = await Promise.all([
     db.website.findMany({ where: stale, select: { id: true, workspaceId: true }, take: 2 }),
     db.prospect.findMany({ where: { status: "WON", ...stale }, select: { id: true, workspaceId: true }, take: 2 }),
+    db.watchedCompetitor.findMany({ where: stale, select: { id: true, workspaceId: true }, take: 2 }),
   ]);
   const due: { workspaceId: string; owner: ChangeOwner }[] = [
     ...websites.map((w) => ({ workspaceId: w.workspaceId, owner: { websiteId: w.id } })),
     ...clients.map((p) => ({ workspaceId: p.workspaceId, owner: { prospectId: p.id } })),
+    ...competitors.map((c) => ({ workspaceId: c.workspaceId, owner: { competitorId: c.id } })),
   ].slice(0, 2);
   for (const d of due) {
     await checkSiteChanges(d.workspaceId, d.owner).catch(async (e) => {
       log.warn("change check failed", { ...d.owner, reason: (e as Error).message });
       // Try again tomorrow rather than every hour.
-      const retry = { changesCheckedAt: new Date(now.getTime() - 6 * DAY) };
-      if ("websiteId" in d.owner) await db.website.update({ where: { id: d.owner.websiteId }, data: retry });
-      else await db.prospect.update({ where: { id: d.owner.prospectId }, data: retry });
+      await stamp(d.owner, new Date(now.getTime() - 6 * DAY));
     });
   }
   return due.length;

@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { getWebsite } from "@/lib/websites";
 import { propertyMatches } from "@/lib/search-console";
 import { CHANGE_LABELS, type ChangeKind } from "@/lib/site-changes";
-import { isMonthKey, monthKey, shiftMonth } from "@/lib/client-work";
+import { isMonthKey, monthKey, monthLabel, shiftMonth } from "@/lib/client-work";
 import { WORK_CATEGORIES, monthWork } from "@/lib/work-log";
 import { WorkLog } from "./work-log";
 import { Alert, Badge, Card, CardHeader, PageHeader, buttonClass } from "@/components/ui";
@@ -17,6 +17,9 @@ import { Explorer } from "./explorer";
 import { PropertyPicker } from "./property-picker";
 import { WebsiteChanges } from "./changes";
 import { Alerts, InternalLinks, KeywordTracking, ReportEmail } from "./monitoring";
+import { CompetitorWatch, SiteHealth } from "./health";
+import { indexSummary } from "@/lib/site-health";
+import { MAX_COMPETITORS, competitorActivity } from "@/lib/competitor-watch";
 import { MAX_KEYWORDS, trackedKeywords } from "@/lib/rank-tracking";
 import { resolveSender } from "@/lib/messaging/email";
 import { ALERT_LABELS, openAlerts, type AlertKind } from "@/lib/site-alerts";
@@ -30,7 +33,7 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
   const session = await requireSession();
   const w = await getWebsite(session.workspace.id, id);
   if (!w) notFound();
-  const [gsc, changes, work, keywords, alerts, deliveries, gmail] = await Promise.all([
+  const [gsc, changes, work, keywords, alerts, deliveries, gmail, index, rivals] = await Promise.all([
     db.integrationConnection.findFirst({ where: { workspaceId: session.workspace.id, provider: "SEARCH_CONSOLE", status: "CONNECTED", encryptedSecret: { not: null } }, select: { accountLabel: true } }),
     db.siteChange.findMany({ where: { websiteId: w.id, workspaceId: session.workspace.id }, orderBy: { detectedAt: "desc" }, take: 60 }),
     monthWork(session.workspace.id, w.id, month),
@@ -38,6 +41,8 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
     openAlerts(session.workspace.id, w.id),
     db.reportDelivery.findMany({ where: { websiteId: w.id, workspaceId: session.workspace.id }, orderBy: { month: "desc" }, take: 6 }),
     resolveSender(session.workspace.id).then((s) => !!s),
+    indexSummary(session.workspace.id, w.id),
+    competitorActivity(session.workspace.id, w.id, month),
   ]);
   const linked = w.gscSiteUrl && propertyMatches(w.gscSiteUrl, w.domain) ? w.gscSiteUrl : null;
 
@@ -101,6 +106,17 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
       </div>
 
       <div className="mb-6">
+        <SiteHealth
+          websiteId={w.id}
+          linked={!!linked}
+          robotsCheckedAt={w.robotsCheckedAt?.toISOString() ?? null}
+          sitemapUrls={w.sitemapUrlCount}
+          problems={alerts.filter((a) => !a.resolvedAt && (a.kind === "ROBOTS" || a.kind === "SITEMAP")).map((a) => ({ title: a.title, label: ALERT_LABELS[a.kind as AlertKind] ?? a.kind }))}
+          index={{ ...index, checkedAt: index.checkedAt?.toISOString() ?? null }}
+        />
+      </div>
+
+      <div className="mb-6">
         <KeywordTracking websiteId={w.id} linked={!!linked} syncedAt={w.keywordsSyncedAt?.toISOString() ?? null} keywords={keywords} max={MAX_KEYWORDS} />
       </div>
 
@@ -117,6 +133,10 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
           gmail={!!gmail}
           deliveries={deliveries.map((d) => ({ id: d.id, month: d.month, to: d.to, status: d.status, error: d.error, sentAt: d.sentAt?.toISOString() ?? null, createdAt: d.createdAt.toISOString() }))}
         />
+      </div>
+
+      <div className="mb-6">
+        <CompetitorWatch websiteId={w.id} monthLabel={monthLabel(month)} max={MAX_COMPETITORS} competitors={rivals.map((c) => ({ ...c, checkedAt: c.checkedAt?.toISOString() ?? null }))} />
       </div>
 
       <div className="mb-6">

@@ -12,8 +12,8 @@ import { analyticsRows } from "./search-console";
  * the site recovers. Every alert comes from a real check; nothing is estimated.
  */
 
-export type AlertKind = "TRAFFIC_DROP" | "PAGE_GONE" | "SITE_DOWN" | "RANK_DROP";
-export const ALERT_LABELS: Record<AlertKind, string> = { TRAFFIC_DROP: "Traffic drop", PAGE_GONE: "Page gone", SITE_DOWN: "Site down", RANK_DROP: "Keyword fell" };
+export type AlertKind = "TRAFFIC_DROP" | "PAGE_GONE" | "SITE_DOWN" | "RANK_DROP" | "INDEXING" | "ROBOTS" | "SITEMAP";
+export const ALERT_LABELS: Record<AlertKind, string> = { TRAFFIC_DROP: "Traffic drop", PAGE_GONE: "Page gone", SITE_DOWN: "Site down", RANK_DROP: "Keyword fell", INDEXING: "Indexing", ROBOTS: "Blocked from Google", SITEMAP: "Sitemap" };
 
 const DAY = 86400_000;
 /** Failed checks in a row before the site is called down (one failure can be a network blip). */

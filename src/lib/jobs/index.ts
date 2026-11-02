@@ -61,8 +61,8 @@ export function ensureWorker() {
   // My Websites: uptime every 15 minutes, daily keyword positions and traffic checks, and monthly report emails on each client's day.
   if (!state.__monitorTimer && process.env.DISABLE_MAINTENANCE !== "true" && process.env.DISABLE_TRACKING !== "true") {
     const monitor = () =>
-      Promise.all([import("../site-alerts"), import("../report-delivery")])
-        .then(([alerts, reports]) => Promise.allSettled([alerts.runSiteMonitoring(), reports.runReportSchedules()]))
+      Promise.all([import("../site-alerts"), import("../report-delivery"), import("../site-health")])
+        .then(([alerts, reports, health]) => Promise.allSettled([alerts.runSiteMonitoring(), reports.runReportSchedules(), health.runSiteHealth()]))
         .then((done) => done.forEach((r) => r.status === "rejected" && logger("monitoring").error("monitoring tick failed", { err: r.reason })))
         .catch((e) => logger("monitoring").error("monitoring tick failed", { err: e }));
     state.__monitorTimer = setInterval(monitor, MONITOR_TICK_MS);

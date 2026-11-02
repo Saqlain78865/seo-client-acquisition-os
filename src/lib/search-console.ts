@@ -254,6 +254,68 @@ export async function analyticsRows(workspaceId: string, websiteId: string, body
   return (r.rows ?? []).map((row) => ({ keys: row.keys ?? [], clicks: row.clicks, impressions: row.impressions, position: row.position }));
 }
 
+export type Inspection = {
+  verdict: string;
+  coverageState: string | null;
+  robotsTxtState: string | null;
+  indexingState: string | null;
+  pageFetchState: string | null;
+  googleCanonical: string | null;
+  userCanonical: string | null;
+  lastCrawlTime: string | null;
+};
+
+/**
+ * Google's index status of pages of the website (URL Inspection API, read-only). Only URLs on the
+ * website's own host are inspected. Google allows 2,000 inspections a day per property.
+ */
+export async function inspectUrls(workspaceId: string, websiteId: string, urls: string[], fetchImpl: typeof fetch = fetch) {
+  const w = await db.website.findFirst({ where: { id: websiteId, workspaceId }, select: { gscSiteUrl: true, domain: true } });
+  if (!w?.gscSiteUrl || !propertyMatches(w.gscSiteUrl, w.domain)) throw new GscError("Link this website's Search Console property first.");
+  const own = urls.filter((u) => {
+    try {
+      return bare(new URL(u).hostname) === w.domain || bare(new URL(u).hostname).endsWith(`.${w.domain}`);
+    } catch {
+      return false;
+    }
+  });
+  const tok = await token(workspaceId, fetchImpl);
+  const out = new Map<string, Inspection | { error: string }>();
+  // A few at a time: Google allows 600 inspections a minute.
+  for (let i = 0; i < own.length; i += 4) {
+    await Promise.all(
+      own.slice(i, i + 4).map(async (url) => {
+        try {
+          const res = await fetchImpl("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", {
+            method: "POST",
+            headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" },
+            body: JSON.stringify({ inspectionUrl: url, siteUrl: w.gscSiteUrl, languageCode: "en-US" }),
+            signal: AbortSignal.timeout(60_000),
+          });
+          const json = (await res.json().catch(() => ({}))) as { inspectionResult?: { indexStatusResult?: Record<string, string> }; error?: { message?: string } };
+          if (res.status === 401) throw new GscError("Search Console access expired or was removed. Reconnect it on the Integrations page.");
+          if (!res.ok) return void out.set(url, { error: json.error?.message ?? `HTTP ${res.status}` });
+          const r = json.inspectionResult?.indexStatusResult ?? {};
+          out.set(url, {
+            verdict: r.verdict ?? "VERDICT_UNSPECIFIED",
+            coverageState: r.coverageState ?? null,
+            robotsTxtState: r.robotsTxtState ?? null,
+            indexingState: r.indexingState ?? null,
+            pageFetchState: r.pageFetchState ?? null,
+            googleCanonical: r.googleCanonical ?? null,
+            userCanonical: r.userCanonical ?? null,
+            lastCrawlTime: r.lastCrawlTime ?? null,
+          });
+        } catch (e) {
+          if (e instanceof GscError) throw e;
+          out.set(url, { error: (e as Error).message });
+        }
+      }),
+    );
+  }
+  return out;
+}
+
 /** One calendar month (YYYY-MM) against the month before, for the website's monthly report. */
 export async function monthReport(workspaceId: string, websiteId: string, month: string, fetchImpl: typeof fetch = fetch) {
   const [y, m] = month.split("-").map(Number);
