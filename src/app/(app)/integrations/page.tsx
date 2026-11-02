@@ -6,7 +6,7 @@ import { googleClient, redirectUri } from "@/lib/messaging/google-oauth";
 import { formatDate } from "@/lib/utils";
 import { Alert, Badge, Card, CardHeader, buttonClass } from "@/components/ui";
 import { RefreshOnFocus } from "@/components/refresh-on-focus";
-import { ApiKeyForm, ConnectionButtons, GmailSmtpForm, GoogleAppForm, SmtpForm } from "./cards";
+import { ApiKeyForm, ConnectionButtons, DriveBackupNow, GmailSmtpForm, GoogleAppForm, SmtpForm } from "./cards";
 
 export const metadata: Metadata = { title: "Integrations" };
 
@@ -196,6 +196,61 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           ) : (
             <p className="text-sm text-muted">Save the Google sign-in app first.</p>
           )}
+        </IntegrationCard>
+        <IntegrationCard
+          title="Gmail reply detection"
+          c={c.GMAIL_REPLIES}
+          canEdit={canEdit}
+          canTest={false}
+          capabilities={["Read-only: checks your inbox every 15 minutes for replies from prospects","A reply stops their follow-ups and moves the deal to “Replied”","Nothing is sent, changed or deleted"]}
+          steps={<p>In Google Cloud the Gmail API must be enabled. Google shows a warning for this permission until the app is verified; choose Advanced → Continue for your own account.</p>}
+        >
+          {googleReady ? (
+            canEdit && (
+              <a href="/api/integrations/google/start?for=replies" className={buttonClass(c.GMAIL_REPLIES.hasSecret ? "secondary" : "primary")}>
+                {c.GMAIL_REPLIES.hasSecret ? "Reconnect" : "Turn on reply detection"}
+              </a>
+            )
+          ) : (
+            <p className="text-sm text-muted">Save the Google sign-in app first.</p>
+          )}
+        </IntegrationCard>
+        <IntegrationCard
+          title="Google Calendar"
+          c={c.GOOGLE_CALENDAR}
+          canEdit={canEdit}
+          canTest={false}
+          capabilities={["Every follow-up becomes a Calendar event with a reminder","Done or cancelled follow-ups are removed from the calendar"]}
+          steps={<p>In Google Cloud → APIs &amp; Services, enable “Google Calendar API”, then connect.</p>}
+        >
+          {googleReady ? (
+            canEdit && (
+              <a href="/api/integrations/google/start?for=calendar" className={buttonClass(c.GOOGLE_CALENDAR.hasSecret ? "secondary" : "primary")}>
+                {c.GOOGLE_CALENDAR.hasSecret ? "Reconnect" : "Connect Calendar"}
+              </a>
+            )
+          ) : (
+            <p className="text-sm text-muted">Save the Google sign-in app first.</p>
+          )}
+        </IntegrationCard>
+        <IntegrationCard
+          title="Google Drive backup"
+          c={c.GOOGLE_DRIVE}
+          canEdit={canEdit}
+          canTest={false}
+          capabilities={["The database is copied to a “LeadLift backups” folder every day","The last 14 backups are kept; the app can only see files it created"]}
+          steps={<p>In Google Cloud → APIs &amp; Services, enable “Google Drive API”, then connect.</p>}
+        >
+          {googleReady ? (
+            canEdit && (
+              <a href="/api/integrations/google/start?for=drive" className={buttonClass(c.GOOGLE_DRIVE.hasSecret ? "secondary" : "primary")}>
+                {c.GOOGLE_DRIVE.hasSecret ? "Reconnect" : "Connect Drive"}
+              </a>
+            )
+          ) : (
+            <p className="text-sm text-muted">Save the Google sign-in app first.</p>
+          )}
+          {c.GOOGLE_DRIVE.hasSecret && canEdit && <DriveBackupNow lastBackupAt={(c.GOOGLE_DRIVE.config.lastBackupAt as string | undefined) ?? null} lastBackupName={(c.GOOGLE_DRIVE.config.lastBackupName as string | undefined) ?? null} />}
         </IntegrationCard>
       </div>
 

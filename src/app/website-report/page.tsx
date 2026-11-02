@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowDownRight, ArrowLeft, Binoculars, FileSearch, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Lightbulb, Rocket, Search, Sparkles, Target, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowLeft, Binoculars, FileSearch, TrendingDown, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Lightbulb, Rocket, Search, Sparkles, Target, TrendingUp } from "lucide-react";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isMonthKey, monthKey, monthLabel, shiftMonth } from "@/lib/client-work";
@@ -14,6 +14,7 @@ import { PrintButton } from "../work-report/print-button";
 import { readReportLink } from "@/lib/report-delivery";
 import { indexSummary } from "@/lib/site-health";
 import { competitorActivity } from "@/lib/competitor-watch";
+import { contentDecay, type DecayingPage } from "@/lib/gsc-analysis";
 
 export const metadata: Metadata = { title: "Monthly SEO report", robots: { index: false } };
 
@@ -156,6 +157,12 @@ export default async function WebsiteReportPage({ searchParams }: { searchParams
   const t: GscTotals | null = gsc?.queries.totals ?? null;
   const p: GscTotals | null = gsc?.queries.previousTotals ?? null;
   const found = gsc ? insights(gsc.queries.rows, gsc.pages.rows) : null;
+  // Pages losing clicks over the four months up to this report's month.
+  let decaying: DecayingPage[] = [];
+  if (gsc) {
+    const [ry, rm] = month.split("-").map(Number);
+    decaying = await contentDecay(session.workspace.id, w.id, fetch, new Date(Date.UTC(ry, rm, 1))).catch(() => []);
+  }
   const hasData = !!t && t.impressions > 0;
 
   // Work found on the live site by the weekly check, grouped the way an SEO would report it.
@@ -514,6 +521,39 @@ export default async function WebsiteReportPage({ searchParams }: { searchParams
               ))}
             </div>
           )}
+        </Slide>
+      )}
+
+      {/* Content decay */}
+      {decaying.length > 0 && (
+        <Slide title="Pages to refresh" kicker="Content decay — clicks falling month after month" icon={<TrendingDown className="h-5 w-5" />} brand={brand}>
+          <p className="mb-4 text-[#475569]">These pages used to bring more visitors from Google. Updating their content, titles and internal links usually wins the clicks back.</p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-[#64748b]">
+                <th className="py-1.5 font-medium">Page</th>
+                {decaying[0].months.map((m) => (
+                  <th key={m.month} className="py-1.5 text-right font-medium">
+                    {new Date(`${m.month}-01T12:00:00Z`).toLocaleDateString("en-GB", { month: "short" })}
+                  </th>
+                ))}
+                <th className="py-1.5 text-right font-medium">Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {decaying.slice(0, 8).map((d) => (
+                <tr key={d.page} className="border-t border-[#f1f5f9]">
+                  <td className="max-w-[16rem] truncate py-1.5 pr-3">{path(d.page)}</td>
+                  {d.months.map((m) => (
+                    <td key={m.month} className="py-1.5 text-right tabular-nums">
+                      {n(m.clicks)}
+                    </td>
+                  ))}
+                  <td className="py-1.5 text-right font-semibold text-[#dc2626] tabular-nums">−{Math.round(d.drop * 100)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </Slide>
       )}
 

@@ -7,6 +7,7 @@ import type { ProspectInput } from "./validation";
 
 export const PROSPECT_SORTS = {
   recent: { createdAt: "desc" },
+  hottest: { leadScore: { sort: "desc", nulls: "last" } },
   oldest: { createdAt: "asc" },
   name: { businessName: "asc" },
   activity: { lastActivityAt: "desc" },

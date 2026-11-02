@@ -8,6 +8,7 @@ export const DEFAULT_PIPELINE_STATUSES: { key: string; label: string; isTerminal
   { key: "PROPOSAL_DRAFT", label: "Proposal Draft" },
   { key: "PROPOSAL_READY", label: "Proposal Ready" },
   { key: "PROPOSAL_SENT", label: "Proposal Sent" },
+  { key: "REPLIED", label: "Replied" },
   { key: "FOLLOW_UP_DUE", label: "Follow-up Due" },
   { key: "MEETING_SCHEDULED", label: "Meeting Scheduled" },
   { key: "NEGOTIATION", label: "Negotiation" },

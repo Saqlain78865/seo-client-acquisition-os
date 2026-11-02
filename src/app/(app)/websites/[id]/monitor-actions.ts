@@ -13,6 +13,9 @@ import { db } from "@/lib/db";
 import { monthKey, shiftMonth } from "@/lib/client-work";
 import { CompetitorWatchError, addWatchedCompetitor, checkCompetitorNow, removeWatchedCompetitor } from "@/lib/competitor-watch";
 import { checkRobotsAndSitemap, runIndexCheck } from "@/lib/site-health";
+import { cannibalization, contentDecay, type Cannibalization, type DecayingPage } from "@/lib/gsc-analysis";
+import { runLinkAudit } from "@/lib/link-audit-run";
+import type { BrokenLink, CanonicalIssue, RedirectIssue } from "@/lib/link-audit";
 
 type R<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -129,4 +132,22 @@ export async function checkIndexingAction(websiteId: string) {
     const r = await runIndexCheck(ws, websiteId);
     return { inspected: r?.inspected ?? 0, errors: r?.errors ?? 0 };
   });
+}
+
+export async function linkAuditAction(websiteId: string): Promise<R<{ pagesChecked: number; externalChecked: number; broken: BrokenLink[]; redirects: RedirectIssue[]; canonicals: CanonicalIssue[] }>> {
+  const session = await requireSession();
+  try {
+    return { ok: true, ...(await runLinkAudit(session.workspace.id, websiteId)) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function gscAnalysisAction(websiteId: string, kind: "cannibalization" | "decay"): Promise<R<{ cannibal?: Cannibalization[]; decay?: DecayingPage[] }>> {
+  const session = await requireSession();
+  try {
+    return kind === "decay" ? { ok: true, decay: await contentDecay(session.workspace.id, websiteId) } : { ok: true, cannibal: await cannibalization(session.workspace.id, websiteId) };
+  } catch (e) {
+    return fail(e);
+  }
 }

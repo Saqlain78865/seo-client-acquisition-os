@@ -33,7 +33,8 @@ describe("workspace bootstrap", () => {
       db.workspaceSettings.findUnique({ where: { workspaceId: wsA } }),
       db.messageTemplate.count({ where: { workspaceId: wsA } }),
     ]);
-    expect(statuses).toBe(12);
+    // Includes "Replied", set by Gmail reply detection.
+    expect(statuses).toBe(13);
     expect(settings).not.toBeNull();
     // Email only: WhatsApp sending was removed.
     expect(templates).toBeGreaterThanOrEqual(1);

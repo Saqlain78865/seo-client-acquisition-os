@@ -12,3 +12,8 @@ registerJobHandler(JOB_TYPES.AUDIT_RUN, async (payload) => {
     await afterAudit(String(payload.auditId));
   }
 });
+
+registerJobHandler("audit.video", async (payload) => {
+  const { generateAuditVideo } = await import("../video/audit-video");
+  await generateAuditVideo(String(payload.videoId));
+});

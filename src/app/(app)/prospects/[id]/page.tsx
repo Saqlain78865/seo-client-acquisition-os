@@ -18,6 +18,7 @@ import { DangerZone } from "./danger-zone";
 import { OptOut } from "./opt-out";
 import { KickoffChecklist } from "./kickoff";
 import { TrackingCard } from "./tracking-card";
+import { VideoCard } from "./video-card";
 import { CHANGE_LABELS, type ChangeKind } from "@/lib/site-changes";
 import { createProposalAction } from "../../proposals/actions";
 
@@ -29,6 +30,12 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
   const [p, statuses] = await Promise.all([getProspect(session.workspace.id, id), getPipelineStatuses(session.workspace.id)]);
   if (!p) notFound();
   const statusLabel = new Map(statuses.map((s) => [s.key, s.label]));
+  const [video, auditDone, replies] = await Promise.all([
+    db.auditVideo.findFirst({ where: { prospectId: p.id, workspaceId: session.workspace.id }, orderBy: { createdAt: "desc" } }),
+    db.websiteAudit.count({ where: { prospectId: p.id, workspaceId: session.workspace.id, status: { in: ["COMPLETED", "PARTIAL"] } } }),
+    db.gmailReply.findMany({ where: { prospectId: p.id, workspaceId: session.workspace.id }, orderBy: { receivedAt: "desc" }, take: 3 }),
+  ]);
+  const reasons = (p.leadScoreReasons as string[] | null) ?? [];
   const isAdmin = hasRole(session, "ADMIN");
   const mergeCandidates = isAdmin
     ? await db.prospect.findMany({
@@ -179,6 +186,12 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
             </Card>
           </div>
 
+          <VideoCard
+            prospectId={p.id}
+            canMake={auditDone > 0}
+            video={video ? { id: video.id, status: video.status, seconds: video.seconds, error: video.error, createdAt: video.createdAt.toISOString() } : null}
+          />
+
           <Card>
             <CardHeader title="Notes, meetings and objections" />
             <div className="p-5">
@@ -204,6 +217,34 @@ export default async function ProspectPage({ params }: { params: Promise<{ id: s
 
         <div className="space-y-6">
           {kickoff.length > 0 && <KickoffChecklist prospectId={p.id} tasks={kickoff.map((t) => ({ id: t.id, title: t.title, detail: t.detail, done: t.done }))} />}
+          {p.leadScore != null && (
+            <Card>
+              <CardHeader
+                title="Lead score"
+                description="How much they need help, and how warm they are. Updated every 15 minutes."
+                action={<span className={`text-2xl font-extrabold tabular-nums ${p.leadScore >= 60 ? "text-danger" : p.leadScore >= 35 ? "text-warning" : "text-muted"}`}>{p.leadScore}</span>}
+              />
+              <ul className="space-y-1 p-5 text-xs">
+                {reasons.length === 0 ? <li className="text-muted">Nothing to score yet.</li> : reasons.map((r) => <li key={r} className={r.startsWith("-") ? "text-danger" : ""}>{r}</li>)}
+              </ul>
+            </Card>
+          )}
+          {replies.length > 0 && (
+            <Card>
+              <CardHeader title="Email replies" description="Found in your Gmail (read-only). Their follow-ups were stopped." />
+              <ul className="divide-y divide-border text-sm">
+                {replies.map((r) => (
+                  <li key={r.id} className="px-5 py-3">
+                    <p className="font-medium">{r.subject ?? "(no subject)"}</p>
+                    <p className="text-xs text-muted">
+                      {r.fromEmail} · {formatDate(r.receivedAt, true)}
+                    </p>
+                    {r.snippet && <p className="mt-1 line-clamp-2 text-xs">{r.snippet}</p>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card>
             <CardHeader title="Pipeline status" />
             <div className="p-5">

@@ -37,12 +37,13 @@ for (const name of fs.readdirSync(server)) {
   if (!KEEP.has(name)) fs.rmSync(path.join(server, name), { recursive: true, force: true });
 }
 console.log(`  kept ${[...KEEP].join(", ")}`);
-// Tracing misses files Playwright loads at run time (browsers.json, protocol files), so ship it whole.
-for (const pkg of ["playwright", "playwright-core"]) {
+// Tracing misses files Playwright loads at run time (browsers.json, protocol files), so ship it whole;
+// mp4-muxer is read from disk into the browser page that makes audit videos.
+for (const pkg of ["playwright", "playwright-core", "mp4-muxer"]) {
   fs.rmSync(path.join(server, "node_modules", pkg), { recursive: true, force: true });
   fs.cpSync(path.join(root, "node_modules", pkg), path.join(server, "node_modules", pkg), { recursive: true });
 }
-console.log("  copied playwright and playwright-core in full");
+console.log("  copied playwright, playwright-core and mp4-muxer in full");
 fs.copyFileSync(path.join(here, "desktop-migrate.cjs"), path.join(server, "desktop-migrate.cjs"));
 fs.copyFileSync(path.join(here, "desktop-server.cjs"), path.join(server, "desktop-server.cjs"));
 fs.copyFileSync(path.join(here, "desktop-backup.cjs"), path.join(server, "desktop-backup.cjs"));

@@ -3,11 +3,15 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { saveCredentials } from "@/lib/integrations";
 import { reportError } from "@/lib/log";
-import { GoogleAuthError, exchangeCode, readState } from "@/lib/messaging/google-oauth";
+import { GOOGLE_PURPOSES, GoogleAuthError, exchangeCode, readState } from "@/lib/messaging/google-oauth";
 
 const MESSAGES: Record<string, string> = {
   "connected=gsc": "Search Console is connected (read-only).",
   "connected=gmail": "Gmail is connected through Google sign-in.",
+  "connected=replies": "Reply detection is on: LeadLift reads your inbox only to spot replies from prospects.",
+  "connected=calendar": "Google Calendar is connected: follow-ups are added with a reminder.",
+  "connected=drive": "Google Drive is connected: a backup is saved there every day.",
+  "error=oauth_scope_other": "The permission was not granted. Tick its checkbox on Google's consent screen and try again.",
   "error=forbidden": "Only owners and admins can connect Google.",
   "error=oauth_state": "This sign-in link expired or could not be verified. Start again from LeadLift → Integrations.",
   "error=oauth_denied": "Google access was not granted.",
@@ -50,6 +54,12 @@ export async function GET(request: NextRequest) {
       if (!t.scope.includes("webmasters.readonly")) return done("error=oauth_scope_gsc");
       await saveCredentials(state.w, "SEARCH_CONSOLE", { secret: { refreshToken: t.refreshToken }, accountLabel: t.email, config: {} });
       return done("connected=gsc");
+    }
+    if (state.p !== "gmail") {
+      const p = GOOGLE_PURPOSES[state.p];
+      if (!t.scope.split(" ").includes(p.scope)) return done("error=oauth_scope_other");
+      await saveCredentials(state.w, p.provider, { secret: { refreshToken: t.refreshToken }, accountLabel: t.email, config: {} });
+      return done(`connected=${state.p}`);
     }
     if (!t.scope.includes("gmail.compose")) return done("error=oauth_scope");
     await saveCredentials(state.w, "GMAIL_OAUTH", { secret: { refreshToken: t.refreshToken }, accountLabel: t.email, config: {} });

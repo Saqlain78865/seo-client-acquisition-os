@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import type { Provider } from "@/lib/integrations";
-import { disconnectAction, saveApiKeyAction, saveGmailSmtpAction, saveGoogleAppAction, saveSmtpAction, testConnectionAction, type IntegrationState } from "./actions";
+import { disconnectAction, driveBackupNowAction, saveApiKeyAction, saveGmailSmtpAction, saveGoogleAppAction, saveSmtpAction, testConnectionAction, type IntegrationState } from "./actions";
 
 function useFeedback(state: IntegrationState) {
   useEffect(() => {
@@ -136,6 +136,31 @@ export function ConnectionButtons({ provider, canTest }: { provider: Provider; c
       )}
       <Button size="sm" variant="ghost" disabled={pending} className="text-danger" onClick={() => confirm("Disconnect and delete the stored credentials?") && run(() => disconnectAction(provider))}>
         Disconnect
+      </Button>
+    </div>
+  );
+}
+
+export function DriveBackupNow({ lastBackupAt, lastBackupName }: { lastBackupAt: string | null; lastBackupName: string | null }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  return (
+    <div className="mt-3 space-y-2">
+      <p className="text-xs text-muted">{lastBackupAt ? `Last backup: ${new Date(lastBackupAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}${lastBackupName ? ` (${lastBackupName})` : ""}` : "No backup yet — the first one runs within 15 minutes."}</p>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await driveBackupNowAction();
+            if (r?.ok) toast.success(r.message ?? "Backed up");
+            else if (r?.error) toast.error(r.error);
+            router.refresh();
+          })
+        }
+      >
+        {pending ? "Backing up…" : "Back up now"}
       </Button>
     </div>
   );

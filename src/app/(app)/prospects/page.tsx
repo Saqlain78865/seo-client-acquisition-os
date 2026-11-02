@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ChevronLeft, ChevronRight, Download, MapPin, Plus, Users } from "lucide-react";
 import { requireSession } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { refreshLeadScores } from "@/lib/lead-score";
 import { listProspects, PROSPECT_SORTS } from "@/lib/prospects";
 import { getPipelineStatuses } from "@/lib/workspace";
 import { formatDate, formatMoney } from "@/lib/utils";
@@ -16,6 +17,7 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const SORT_LABELS: Record<keyof typeof PROSPECT_SORTS, string> = {
   recent: "Newest first",
+  hottest: "Hottest leads",
   oldest: "Oldest first",
   name: "Business name",
   activity: "Last activity",
@@ -38,6 +40,9 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Se
     sort: str("sort"),
     page: Number(str("page") ?? 1) || 1,
   };
+
+  // New prospects get their lead score straight away (it is refreshed every 15 minutes after that).
+  if (await db.prospect.count({ where: { workspaceId: session.workspace.id, leadScore: null } })) await refreshLeadScores(session.workspace.id);
 
   const [result, statuses, countries, members] = await Promise.all([
     listProspects(session.workspace.id, filters),
@@ -167,6 +172,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Se
                 <tr>
                   <th scope="col" className="px-4 py-3 font-medium">Business</th>
                   <th scope="col" className="px-4 py-3 font-medium">Status</th>
+                  <th scope="col" className="hidden px-4 py-3 font-medium sm:table-cell" title="Lead score 0–100: needs (website and Google profile weaknesses) plus warmth (replies, proposal views, stage)">Score</th>
                   <th scope="col" className="hidden px-4 py-3 font-medium md:table-cell">Contact</th>
                   <th scope="col" className="hidden px-4 py-3 font-medium lg:table-cell">Location</th>
                   <th scope="col" className="hidden px-4 py-3 text-right font-medium sm:table-cell">Est. value</th>
@@ -194,6 +200,19 @@ export default async function ProspectsPage({ searchParams }: { searchParams: Se
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={p.status} label={statusLabel.get(p.status)} />
+                      </td>
+                      <td className="hidden px-4 py-3 sm:table-cell">
+                        {p.leadScore == null ? (
+                          <span className="text-xs text-muted">—</span>
+                        ) : (
+                          <span
+                            title={((p.leadScoreReasons as string[] | null) ?? []).join(" · ")}
+                            className={`inline-flex min-w-10 justify-center rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${p.leadScore >= 60 ? "bg-danger-soft text-danger" : p.leadScore >= 35 ? "bg-warning-soft text-warning" : "bg-surface-2 text-muted"}`}
+                          >
+                            {p.leadScore >= 60 ? "🔥 " : ""}
+                            {p.leadScore}
+                          </span>
+                        )}
                       </td>
                       <td className="hidden px-4 py-3 text-xs md:table-cell">
                         {email && <div className="truncate">{email.value}</div>}

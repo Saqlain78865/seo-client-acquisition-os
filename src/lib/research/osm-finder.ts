@@ -8,7 +8,8 @@ import type { FoundBusiness } from "./places-tools";
  */
 
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
-const OVERPASS = "https://overpass-api.de/api/interpreter";
+// The main Overpass server and a mirror, asked together: whichever answers first is used.
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
 const UA = "LeadLift/1.0 (SEO prospecting desktop app)";
 
 /** Common business types and their OpenStreetMap tags. */
@@ -102,12 +103,16 @@ export function toBusinesses(elements: OsmElement[]): FoundBusiness[] {
   return out.sort((a, b) => b.score - a.score).slice(0, 100);
 }
 
-async function getJson<T>(url: string, init: RequestInit, fetchImpl: typeof fetch): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetchImpl(url, { ...init, headers: { "user-agent": UA, accept: "application/json", ...(init.headers ?? {}) }, signal: AbortSignal.timeout(40_000) });
-  } catch (e) {
-    throw new OsmError(`OpenStreetMap could not be reached: ${(e as Error).message}`);
+async function getJson<T>(url: string, init: RequestInit, fetchImpl: typeof fetch, timeoutMs = 40_000): Promise<T> {
+  let res: Response | null = null;
+  // One retry: a dropped connection is common on mobile and home internet.
+  for (let attempt = 0; !res; attempt++) {
+    try {
+      res = await fetchImpl(url, { ...init, headers: { "user-agent": UA, accept: "application/json", ...(init.headers ?? {}) }, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (e) {
+      if (attempt >= 1 || (e as Error).name === "TimeoutError") throw new OsmError(`OpenStreetMap could not be reached: ${(e as Error).message}`);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
   }
   if (res.status === 429) throw new OsmError("OpenStreetMap is busy (too many searches). Wait a minute and try again.");
   if (!res.ok) throw new OsmError(`OpenStreetMap returned HTTP ${res.status}. Try again in a minute.`);
@@ -125,6 +130,55 @@ export async function findOsmBusinesses(query: string, fetchImpl: typeof fetch =
   const clamp = (lo: number, hi: number, max: number) => (hi - lo > max ? [(lo + hi) / 2 - max / 2, (lo + hi) / 2 + max / 2] : [lo, hi]);
   const [s, n] = clamp(south, north, 0.6);
   const [w, e] = clamp(west, east, 0.6);
-  const data = await getJson<{ elements?: OsmElement[] }>(OVERPASS, { method: "POST", body: new URLSearchParams({ data: overpassQuery(what, [s, w, n, e]) }), headers: { "content-type": "application/x-www-form-urlencoded" } }, fetchImpl);
-  return { results: toBusinesses(data.elements ?? []), place: places[0].display_name };
+  const body = overpassQuery(what, [s, w, n, e]);
+  // Overpass gives the most results but is often overloaded or unreachable on some networks;
+  // Nominatim's own business search runs alongside and is used when Overpass fails.
+  const [overpass, nominatim] = await Promise.allSettled([
+    Promise.any(OVERPASS.map((url) => getJson<{ elements?: OsmElement[] }>(url, { method: "POST", body: new URLSearchParams({ data: body }), headers: { "content-type": "application/x-www-form-urlencoded" } }, fetchImpl, 20_000))),
+    searchNominatim(what, where, [s, w, n, e], fetchImpl),
+  ]);
+  const fromOverpass = overpass.status === "fulfilled" ? toBusinesses(overpass.value.elements ?? []) : [];
+  const fromNominatim = nominatim.status === "fulfilled" ? toBusinesses(nominatim.value) : [];
+  const results = fromOverpass.length >= fromNominatim.length ? fromOverpass : fromNominatim;
+  if (!results.length && overpass.status === "rejected" && nominatim.status === "rejected") {
+    throw new OsmError("OpenStreetMap could not be reached right now. Check the internet connection and try again in a minute.");
+  }
+  if (!results.length) throw new OsmError(`No “${what}” businesses found on OpenStreetMap in ${where}. Try another word for the business (e.g. “dental clinic”, “restaurant”) or a bigger city.`);
+  return { results, place: places[0].display_name };
+}
+
+type NominatimPlace = { osm_type: string; osm_id: number; lat: string; lon: string; name?: string; category?: string; type?: string; extratags?: Record<string, string> | null; address?: Record<string, string> };
+
+/** The words Nominatim understands for a business type: the user's own, then OpenStreetMap's ("salon" → "hairdresser"). */
+export function nominatimTerms(what: string) {
+  const mapped = TYPES.filter((t) => t.words.test(what)).flatMap((t) => t.tags.map(([, v]) => v.replace(/_/g, " ")));
+  return [...new Set([what.toLowerCase(), ...mapped])].slice(0, 3);
+}
+
+/** Businesses from Nominatim's search ("dentist in Lahore"), shaped like Overpass elements. One search a second, as its policy asks. */
+async function searchNominatim(what: string, where: string, box: [number, number, number, number], fetchImpl: typeof fetch): Promise<OsmElement[]> {
+  const [s, w, n, e] = box;
+  const list: NominatimPlace[] = [];
+  for (const [i, term] of nominatimTerms(what).entries()) {
+    if (i) await new Promise((r) => setTimeout(r, 1100));
+    const params = new URLSearchParams({ q: `${term} in ${where}`, format: "jsonv2", limit: "40", extratags: "1", addressdetails: "1", "accept-language": "en", viewbox: `${w},${n},${e},${s}` });
+    list.push(...(await getJson<NominatimPlace[]>(`${NOMINATIM}?${params}`, {}, fetchImpl, 30_000).catch(() => [])));
+  }
+  return list
+    .filter((p) => p.name && p.category !== "boundary" && p.category !== "place" && p.category !== "highway")
+    .map((p) => ({
+      type: p.osm_type,
+      id: p.osm_id,
+      lat: Number(p.lat),
+      lon: Number(p.lon),
+      tags: {
+        ...(p.extratags ?? {}),
+        name: p.name!,
+        [p.category ?? "amenity"]: p.type ?? "",
+        ...(p.address?.road ? { "addr:street": p.address.road } : {}),
+        ...(p.address?.house_number ? { "addr:housenumber": p.address.house_number } : {}),
+        ...(p.address?.suburb ? { "addr:suburb": p.address.suburb } : {}),
+        ...(p.address?.city ? { "addr:city": p.address.city } : {}),
+      },
+    }));
 }

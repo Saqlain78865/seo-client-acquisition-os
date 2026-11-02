@@ -190,6 +190,11 @@ model Prospect {
   gscSyncedAt        DateTime?
   // Last weekly check of the live website for changes.
   changesCheckedAt   DateTime?
+  // When the prospect last replied by email (found by Gmail reply detection).
+  repliedAt          DateTime?
+  // Lead score 0–100 (how promising and how warm), with the reasons; refreshed by the app.
+  leadScore          Int?
+  leadScoreReasons   Json?
   lastActivityAt     DateTime  @default(now())
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -213,6 +218,8 @@ model Prospect {
   domainChecks      DomainCheck[]
   gbpProfiles       GbpProfile[]
   mapsScans         MapsGridScan[]
+  replies           GmailReply[]
+  videos            AuditVideo[]
   reviewScreenshots ReviewScreenshot[]
   gscDaily          GscDaily[]
   pageSnapshots     PageSnapshot[]
@@ -287,20 +294,22 @@ model Deal {
 }
 
 model FollowUp {
-  id          String    @id @default(cuid())
-  workspaceId String
-  prospectId  String
-  proposalId  String?
+  id              String    @id @default(cuid())
+  workspaceId     String
+  prospectId      String
+  proposalId      String?
   // PROPOSAL_REMINDER | CUSTOM | MEETING_REMINDER | REVIEW_UNANSWERED
-  type        String
-  dueAt       DateTime
-  note        String?
+  type            String
+  dueAt           DateTime
+  note            String?
   // PENDING | DONE | PAUSED | CANCELLED
-  status      String    @default("PENDING")
-  completedAt DateTime?
-  result      String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  status          String    @default("PENDING")
+  completedAt     DateTime?
+  result          String?
+  // The Google Calendar event made for this follow-up (when Calendar is connected).
+  calendarEventId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   prospect  Prospect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
@@ -1401,4 +1410,42 @@ model IndexStatus {
   website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   @@unique([websiteId, url])
+}
+
+/// A reply from a prospect found in the connected Gmail inbox (read-only). Each message is handled once.
+model GmailReply {
+  id          String   @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  messageId   String
+  threadId    String?
+  fromEmail   String
+  subject     String?
+  snippet     String?
+  receivedAt  DateTime
+  createdAt   DateTime @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, messageId])
+  @@index([prospectId, receivedAt])
+}
+
+/// A short MP4 walk-through of a prospect's website and its main problems, to send by WhatsApp or email.
+model AuditVideo {
+  id          String   @id @default(cuid())
+  workspaceId String
+  prospectId  String
+  auditId     String
+  // QUEUED | RUNNING | READY | FAILED
+  status      String   @default("QUEUED")
+  storageKey  String?
+  seconds     Int?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, createdAt])
 }

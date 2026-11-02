@@ -45,7 +45,8 @@ test.describe.serial("Phase 5 messaging journey", () => {
     await expect(page.getByText("No email account connected yet")).toBeVisible();
     // Google sign-in (Gmail API and Search Console) needs the user's own OAuth client first.
     await expect(page.getByText("Add the Google sign-in app (Client ID and Secret) below first.")).toBeVisible();
-    await expect(page.getByText("Save the Google sign-in app first.")).toBeVisible();
+    // Search Console, reply detection, Calendar and Drive all wait for it.
+    await expect(page.getByText("Save the Google sign-in app first.")).toHaveCount(4);
     // WhatsApp was removed: email (Gmail) is the only sending channel.
     await expect(page.getByText("WhatsApp Business Platform")).toHaveCount(0);
 

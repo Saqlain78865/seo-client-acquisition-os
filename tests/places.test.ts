@@ -133,7 +133,9 @@ describe("Places API features (fake Google)", () => {
     }) as unknown as typeof fetch;
     // No Places key is needed for OpenStreetMap.
     const [found] = await findProspects(ws.id, "dentist Karachi", fake, "OSM");
-    expect(urls).toHaveLength(2);
+    // The city, then Overpass (main server and mirror) and Nominatim's search together.
+    expect(urls.filter((u) => u.includes("overpass"))).toHaveLength(2);
+    expect(urls.filter((u) => u.includes("nominatim")).length).toBeGreaterThanOrEqual(2);
     expect(found).toMatchObject({ name: "Dr Ali Dental", source: "OSM", prospectId: null });
     const r = await addFoundBusiness(ws.id, user.id, found, "dentist Karachi");
     const p = await db.prospect.findUniqueOrThrow({ where: { id: r.prospectId } });

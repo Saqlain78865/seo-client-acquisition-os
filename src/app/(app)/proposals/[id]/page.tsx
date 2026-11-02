@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CheckCircle2, Copy, Download, Lock, MessageCircleQuestion, Pencil, Send } from "lucide-react";
+import { CheckCircle2, Copy, Download, FileSignature, Lock, MessageCircleQuestion, Pencil, Send } from "lucide-react";
 import { db } from "@/lib/db";
 import { qrDataUri, shareState, shareUrl } from "@/lib/messaging/share";
 import { requireSession } from "@/lib/auth";
@@ -84,8 +84,24 @@ export default async function ProposalPage({ params, searchParams }: { params: P
 
       {proposal.acceptedAt && (
         <Alert tone="success" title={`Accepted online ${timeAgo(proposal.acceptedAt)}`} className="mb-4">
-          The client accepted this proposal on the share link. Confirm the agreement with them, then record the deal as won on the prospect page.
+          The client accepted this proposal on the share link. The service agreement below already carries their online signature — download it, sign it and send them a copy.
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a href={`/api/proposals/${proposal.id}/agreement?download=1`} className={buttonClass("primary", "sm")}>
+              <FileSignature className="h-4 w-4" /> Download service agreement (PDF)
+            </a>
+            <a href={`/api/proposals/${proposal.id}/agreement`} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "sm")}>
+              Preview
+            </a>
+          </div>
         </Alert>
+      )}
+      {!proposal.acceptedAt && isLatest && (
+        <p className="mb-4 text-xs text-muted">
+          <a href={`/api/proposals/${proposal.id}/agreement`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+            <FileSignature className="h-3.5 w-3.5" /> Service agreement (draft)
+          </a>{" "}
+          — made from this proposal; it is signed automatically when the client accepts online. A standard template: have it checked for your country if needed.
+        </p>
       )}
 
       {!isLatest && (

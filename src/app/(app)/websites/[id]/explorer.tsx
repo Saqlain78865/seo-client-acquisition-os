@@ -111,8 +111,11 @@ function Delta({
   );
 }
 
-/** Line chart of the selected metrics over the period, with the previous period dashed. */
-function Chart({ data, metrics }: { data: ExploreResult; metrics: Metric[] }) {
+/** Work logged or changes found on a day, drawn on the chart. */
+export type Annotation = { date: string; label: string };
+
+/** Line chart of the selected metrics over the period, with the previous period dashed and the work done marked. */
+function Chart({ data, metrics, annotations = [] }: { data: ExploreResult; metrics: Metric[]; annotations?: Annotation[] }) {
   const W = 1000;
   const H = 220;
   const pts = data.series;
@@ -133,6 +136,17 @@ function Chart({ data, metrics }: { data: ExploreResult; metrics: Metric[] }) {
       })
       .join(" ");
   };
+  // Each day with work on it gets one marker; the labels of that day are listed together.
+  const dayIndex = new Map(pts.map((p, i) => [p.date.slice(0, 10), i]));
+  const marks = new Map<number, { date: string; labels: string[] }>();
+  for (const a of annotations) {
+    const i = dayIndex.get(a.date);
+    if (i === undefined) continue;
+    const m = marks.get(i) ?? { date: a.date, labels: [] };
+    m.labels.push(a.label);
+    marks.set(i, m);
+  }
+  const markList = [...marks.entries()].sort((a, b) => a[0] - b[0]);
   return (
     <div>
       <svg
@@ -182,12 +196,32 @@ function Chart({ data, metrics }: { data: ExploreResult; metrics: Metric[] }) {
             vectorEffect="non-scaling-stroke"
           />
         ))}
+        {markList.map(([i, m]) => {
+          const x = (i / (pts.length - 1)) * W;
+          return (
+            <g key={i}>
+              <title>{`${when(m.date)}: ${m.labels.join("; ")}`}</title>
+              <line x1={x} x2={x} y1={10} y2={H} stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
+              <rect x={x - 6} y={0} width={12} height={12} rx={3} fill="#f59e0b" />
+            </g>
+          );
+        })}
       </svg>
       <div className="mt-1 flex justify-between text-[11px] text-muted">
         <span>{when(pts[0].date)}</span>
         <span>{when(pts[Math.floor(pts.length / 2)].date)}</span>
         <span>{when(pts[pts.length - 1].date)}</span>
       </div>
+      {markList.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+          {markList.slice(-8).map(([i, m]) => (
+            <li key={i} className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-[#f59e0b]" />
+              <b className="font-medium text-text">{when(m.date)}</b> {m.labels.join("; ")}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -234,9 +268,11 @@ function toCsv(dim: Dimension, rows: ExploreRow[], compare: boolean) {
 export function Explorer({
   websiteId,
   domain,
+  annotations = [],
 }: {
   websiteId: string;
   domain: string;
+  annotations?: Annotation[];
 }) {
   const [days, setDays] = useState(28);
   const [compare, setCompare] = useState(true);
@@ -427,7 +463,7 @@ export function Explorer({
             {pending && (
               <Loader2 className="absolute top-4 right-4 h-4 w-4 animate-spin text-muted" />
             )}
-            {data && <Chart data={data} metrics={metrics} />}
+            {data && <Chart data={data} metrics={metrics} annotations={annotations} />}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 pt-3">

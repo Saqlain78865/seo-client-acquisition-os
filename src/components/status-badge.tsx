@@ -7,6 +7,7 @@ const TONES: Record<string, BadgeTone> = {
   PROPOSAL_DRAFT: "primary",
   PROPOSAL_READY: "primary",
   PROPOSAL_SENT: "primary",
+  REPLIED: "success",
   FOLLOW_UP_DUE: "warning",
   MEETING_SCHEDULED: "warning",
   NEGOTIATION: "warning",

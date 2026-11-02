@@ -131,7 +131,7 @@ export async function respondToProposal(token: string, input: { kind: "ACCEPT" |
     await notify({
       workspaceId: proposal.workspaceId,
       title: `🎉 ${proposal.prospect.businessName} accepted your proposal`,
-      body: `Accepted by ${who}.${input.message ? ` Message: ${input.message.slice(0, 300)}` : ""}${won ? ` The deal is marked as won${won.kickoffCreated ? ` and a ${won.kickoffCreated}-step kickoff checklist is ready` : ""}. Add the agreed value on the prospect page.` : ""}`,
+      body: `Accepted by ${who}. The signed service agreement is ready to download on the proposal.${input.message ? ` Message: ${input.message.slice(0, 300)}` : ""}${won ? ` The deal is marked as won${won.kickoffCreated ? ` and a ${won.kickoffCreated}-step kickoff checklist is ready` : ""}. Add the agreed value on the prospect page.` : ""}`,
       link: won ? `/prospects/${proposal.prospectId}` : `/proposals/${proposal.id}`,
     });
   } else {

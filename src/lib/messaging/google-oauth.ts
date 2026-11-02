@@ -11,7 +11,20 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 export const GMAIL_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/gmail.compose"];
 export const SEARCH_CONSOLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/webmasters.readonly"];
 export type GoogleClient = { id: string; secret: string };
-export type GooglePurpose = "gmail" | "gsc";
+/**
+ * Each Google connection asks for one narrow permission and is stored as its own integration:
+ * sending (gmail.compose), Search Console (read-only), reading replies (gmail.readonly), adding
+ * follow-ups to Calendar (calendar.events) and backups to Drive (drive.file: only files the app creates).
+ */
+export const GOOGLE_PURPOSES = {
+  gmail: { scope: "https://www.googleapis.com/auth/gmail.compose", provider: "GMAIL_OAUTH" },
+  gsc: { scope: "https://www.googleapis.com/auth/webmasters.readonly", provider: "SEARCH_CONSOLE" },
+  replies: { scope: "https://www.googleapis.com/auth/gmail.readonly", provider: "GMAIL_REPLIES" },
+  calendar: { scope: "https://www.googleapis.com/auth/calendar.events", provider: "GOOGLE_CALENDAR" },
+  drive: { scope: "https://www.googleapis.com/auth/drive.file", provider: "GOOGLE_DRIVE" },
+} as const;
+export type GooglePurpose = keyof typeof GOOGLE_PURPOSES;
+export const isGooglePurpose = (p: unknown): p is GooglePurpose => typeof p === "string" && Object.hasOwn(GOOGLE_PURPOSES, p);
 
 /**
  * Sign-in state signed with the app's key. In the desktop app Google sign-in runs in the system
@@ -34,7 +47,7 @@ export function readState(state: string): OAuthState | null {
   if (got.length !== want.length || !timingSafeEqual(got, want)) return null;
   try {
     const s = JSON.parse(Buffer.from(body, "base64url").toString()) as OAuthState & { e: number };
-    return s.e > Date.now() && (s.p === "gmail" || s.p === "gsc") ? { w: s.w, u: s.u, p: s.p } : null;
+    return s.e > Date.now() && isGooglePurpose(s.p) ? { w: s.w, u: s.u, p: s.p } : null;
   } catch {
     return null;
   }
@@ -75,7 +88,7 @@ export function buildAuthUrl(state: string, client: GoogleClient, purpose: Googl
   u.searchParams.set("client_id", client.id);
   u.searchParams.set("redirect_uri", redirectUri());
   u.searchParams.set("response_type", "code");
-  u.searchParams.set("scope", (purpose === "gsc" ? SEARCH_CONSOLE_SCOPES : GMAIL_SCOPES).join(" "));
+  u.searchParams.set("scope", ["openid", "email", GOOGLE_PURPOSES[purpose].scope].join(" "));
   u.searchParams.set("access_type", "offline");
   u.searchParams.set("prompt", "consent");
   u.searchParams.set("include_granted_scopes", "true");

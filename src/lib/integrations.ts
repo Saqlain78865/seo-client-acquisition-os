@@ -17,6 +17,9 @@ export const PROVIDERS = {
   PLACES: { name: "Google Places (Business Profile data)", group: "Research" },
   GOOGLE_OAUTH_APP: { name: "Google sign-in app (OAuth Client ID & Secret)", group: "Google" },
   SEARCH_CONSOLE: { name: "Google Search Console", group: "Research" },
+  GMAIL_REPLIES: { name: "Gmail reply detection (read-only)", group: "Google" },
+  GOOGLE_CALENDAR: { name: "Google Calendar (follow-up reminders)", group: "Google" },
+  GOOGLE_DRIVE: { name: "Google Drive (daily backup)", group: "Google" },
 } as const;
 export type Provider = keyof typeof PROVIDERS;
 

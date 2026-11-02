@@ -18,6 +18,7 @@ import { PropertyPicker } from "./property-picker";
 import { WebsiteChanges } from "./changes";
 import { Alerts, InternalLinks, KeywordTracking, ReportEmail } from "./monitoring";
 import { CompetitorWatch, SiteHealth } from "./health";
+import { LinkAudit, SearchAnalysis } from "./analysis";
 import { indexSummary } from "@/lib/site-health";
 import { MAX_COMPETITORS, competitorActivity } from "@/lib/competitor-watch";
 import { MAX_KEYWORDS, trackedKeywords } from "@/lib/rank-tracking";
@@ -25,6 +26,26 @@ import { resolveSender } from "@/lib/messaging/email";
 import { ALERT_LABELS, openAlerts, type AlertKind } from "@/lib/site-alerts";
 
 export const metadata: Metadata = { title: "Website" };
+
+/** Work logged and changes found on the live site, by day, for the marks on the traffic chart. */
+async function workMarks(workspaceId: string, websiteId: string) {
+  const since = new Date(Date.now() - 500 * 86400_000);
+  const [work, found] = await Promise.all([
+    db.workLogEntry.findMany({ where: { workspaceId, websiteId, createdAt: { gte: since } }, select: { createdAt: true, title: true, count: true }, take: 500 }),
+    db.siteChange.findMany({ where: { workspaceId, websiteId, detectedAt: { gte: since } }, select: { detectedAt: true, kind: true }, take: 2000 }),
+  ]);
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  const marks = work.map((e) => ({ date: day(e.createdAt), label: e.count > 1 ? `${e.count}× ${e.title}` : e.title }));
+  const byDay = new Map<string, Map<string, number>>();
+  for (const c of found) {
+    const m = byDay.get(day(c.detectedAt)) ?? new Map<string, number>();
+    const label = (CHANGE_LABELS[c.kind as ChangeKind] ?? c.kind).toLowerCase();
+    m.set(label, (m.get(label) ?? 0) + 1);
+    byDay.set(day(c.detectedAt), m);
+  }
+  for (const [date, m] of byDay) marks.push({ date, label: `Site: ${[...m].map(([k, n]) => `${n} ${k}`).join(", ")}` });
+  return marks;
+}
 
 export default async function WebsitePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ month?: string }> }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
@@ -91,7 +112,7 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
         </Card>
       ) : (
         <div className="mb-6 space-y-3">
-          <Explorer websiteId={w.id} domain={w.domain} />
+          <Explorer websiteId={w.id} domain={w.domain} annotations={await workMarks(session.workspace.id, w.id)} />
           <PropertyPicker websiteId={w.id} domain={w.domain} current={linked} />
         </div>
       )}
@@ -137,6 +158,14 @@ export default async function WebsitePage({ params, searchParams }: { params: Pr
 
       <div className="mb-6">
         <CompetitorWatch websiteId={w.id} monthLabel={monthLabel(month)} max={MAX_COMPETITORS} competitors={rivals.map((c) => ({ ...c, checkedAt: c.checkedAt?.toISOString() ?? null }))} />
+      </div>
+
+      <div className="mb-6">
+        <SearchAnalysis websiteId={w.id} linked={!!linked} />
+      </div>
+
+      <div className="mb-6">
+        <LinkAudit websiteId={w.id} />
       </div>
 
       <div className="mb-6">

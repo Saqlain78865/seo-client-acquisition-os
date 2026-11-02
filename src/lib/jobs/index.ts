@@ -58,11 +58,13 @@ export function ensureWorker() {
     state.__trackingTimer.unref?.();
     setTimeout(track, 240_000).unref?.();
   }
-  // My Websites: uptime every 15 minutes, daily keyword positions and traffic checks, and monthly report emails on each client's day.
+  // Every 15 minutes: uptime, Gmail replies, Calendar follow-ups and lead scores; daily Search Console checks and Drive backup; monthly report emails on each client's day.
   if (!state.__monitorTimer && process.env.DISABLE_MAINTENANCE !== "true" && process.env.DISABLE_TRACKING !== "true") {
     const monitor = () =>
-      Promise.all([import("../site-alerts"), import("../report-delivery"), import("../site-health")])
-        .then(([alerts, reports, health]) => Promise.allSettled([alerts.runSiteMonitoring(), reports.runReportSchedules(), health.runSiteHealth()]))
+      Promise.all([import("../site-alerts"), import("../report-delivery"), import("../site-health"), import("../reply-detection"), import("../calendar-sync"), import("../drive-backup"), import("../lead-score")])
+        .then(([alerts, reports, health, replies, calendar, drive, leads]) =>
+          Promise.allSettled([alerts.runSiteMonitoring(), reports.runReportSchedules(), health.runSiteHealth(), replies.runReplyChecks(), calendar.runCalendarSync(), drive.runDriveBackups(), leads.runLeadScores()]),
+        )
         .then((done) => done.forEach((r) => r.status === "rejected" && logger("monitoring").error("monitoring tick failed", { err: r.reason })))
         .catch((e) => logger("monitoring").error("monitoring tick failed", { err: e }));
     state.__monitorTimer = setInterval(monitor, MONITOR_TICK_MS);

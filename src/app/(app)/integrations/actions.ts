@@ -181,3 +181,16 @@ export async function disconnectAction(provider: Provider): Promise<IntegrationS
     return fail(e);
   }
 }
+
+/** Backs the database up to Google Drive now (otherwise it happens once a day). */
+export async function driveBackupNowAction(): Promise<IntegrationState> {
+  try {
+    const session = await requireRole("ADMIN");
+    const { backupToDrive } = await import("@/lib/drive-backup");
+    const r = await backupToDrive(session.workspace.id);
+    revalidatePath("/integrations");
+    return done(`Backup saved to Google Drive: ${r.name} (${(r.bytes / 1048576).toFixed(1)} MB).`);
+  } catch (e) {
+    return fail(e);
+  }
+}
