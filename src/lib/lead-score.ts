@@ -36,7 +36,8 @@ export function scoreLead(p: ScoreInput, now = new Date()): { score: number; rea
   if (isGbpLink(p.websiteUrl)) parts.push([20, "No website"]);
   else if (p.audited) {
     const weak = Math.min(p.critical * 6 + p.high * 3, 25);
-    if (weak) parts.push([weak, `${p.critical} critical and ${p.high} high website issues`]);
+    const issues = [p.critical ? `${p.critical} critical` : "", p.high ? `${p.high} high-impact` : ""].filter(Boolean).join(" and ");
+    if (weak) parts.push([weak, `${issues} website issue${p.critical + p.high === 1 ? "" : "s"}`]);
   }
   if (p.hasProfile) {
     if (p.reviewCount != null && p.reviewCount < 20) parts.push([8, `Only ${p.reviewCount} Google reviews`]);

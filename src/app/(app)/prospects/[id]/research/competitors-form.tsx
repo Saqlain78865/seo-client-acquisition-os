@@ -10,7 +10,7 @@ import { saveCompetitorsAction } from "./actions";
 type Row = { name: string; rating: string; reviews: string; position: string };
 const blank: Row = { name: "", rating: "", reviews: "", position: "" };
 
-/** Top Google Maps competitors entered by hand (no Places key needed): the proposal compares reviews and ratings. */
+/** Top Google Maps competitors entered by hand: the proposal compares reviews and ratings. */
 export function CompetitorsForm({
   prospectId,
   hasProfile,

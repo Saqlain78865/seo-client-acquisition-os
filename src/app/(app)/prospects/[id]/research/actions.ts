@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { reportError, withReference } from "@/lib/log";
-import { ResearchError, fetchGbpProfile, saveManualGbp, chooseTopKeywords, setKeywordInProposal, addCompetitor, addManualKeywords, analyseKeywords, deleteImport, generateAiKeywordIdeas, generateSeedKeywords, observeCompetitor, runDomainCheck, runPerformanceTest } from "@/lib/research/service";
+import { ResearchError, saveManualGbp, chooseTopKeywords, setKeywordInProposal, addCompetitor, addManualKeywords, analyseKeywords, deleteImport, generateAiKeywordIdeas, generateSeedKeywords, observeCompetitor, runDomainCheck, runPerformanceTest } from "@/lib/research/service";
 import type { Strategy } from "@/lib/research/pagespeed";
 import { draftGbpContent, type GbpDrafts } from "@/lib/research/gbp-drafts";
 
@@ -120,14 +120,6 @@ export async function domainCheckAction(prospectId: string, competitorId: string
   });
 }
 
-export async function fetchGbpAction(prospectId: string, queriesText: string) {
-  return run(prospectId, async (ws, userId) => {
-    const queries = queriesText.split(/\r?\n|,/).map((q) => q.trim()).filter(Boolean).slice(0, 3);
-    const row = await fetchGbpProfile(ws, userId, prospectId, queries);
-    return `Google Business Profile loaded: ${row.name}${row.rating != null ? ` · ${row.rating.toFixed(1)}★ from ${row.reviewCount ?? 0} reviews` : ""}`;
-  });
-}
-
 const manualGbpSchema = z.object({
   name: z.string().trim().min(2, "Enter the business name as shown on Google").max(200),
   category: z.string().trim().max(120).optional(),
@@ -149,17 +141,6 @@ export async function saveManualGbpAction(prospectId: string, formData: FormData
   return run(prospectId, async (ws, userId) => {
     const row = await saveManualGbp(ws, userId, prospectId, parsed.data);
     return `Business profile saved for ${row.name}`;
-  });
-}
-
-/** Google Maps ranking grid (Places API): the business's position for one search from points around it. */
-export async function mapsGridAction(prospectId: string, input: { query: string; size: number; spacingKm: number }) {
-  return run(prospectId, async (ws, userId) => {
-    const { scanMapsGrid } = await import("@/lib/research/places-service");
-    const { gridSummary } = await import("@/lib/research/places-tools");
-    const scan = await scanMapsGrid(ws, userId, prospectId, input);
-    const s = gridSummary(scan.points as never);
-    return `Checked ${s.total} points: top 3 at ${s.top3}, not in the top 20 at ${s.missing}`;
   });
 }
 

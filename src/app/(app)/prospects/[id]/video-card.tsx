@@ -109,7 +109,7 @@ export function VideoCard({
         {video?.status === "READY" && (
           <>
             <video
-              src={`/api/videos/${video.id}`}
+              src={`/api/videos/${video.id}#t=3`}
               controls
               preload="metadata"
               className="w-full rounded-xl bg-black"

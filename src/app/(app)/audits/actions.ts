@@ -7,8 +7,7 @@ import { db } from "@/lib/db";
 import { ForbiddenError, requireRole, requireSession } from "@/lib/auth";
 import { reportError, withReference } from "@/lib/log";
 import { auditRequestSchema } from "@/lib/validation";
-import { AuditRequestError, retryAudit, startAudit, startAuditFromGbpLink } from "@/lib/audit/service";
-import { isGbpLink } from "@/lib/research/gbp-link";
+import { AuditRequestError, retryAudit, startAudit } from "@/lib/audit/service";
 import { startBulkAudit } from "@/lib/audit/bulk";
 
 export type AuditFormState = { error?: string; fieldErrors?: Record<string, string[] | undefined> } | undefined;
@@ -21,7 +20,7 @@ export async function startAuditAction(_: AuditFormState, formData: FormData): P
   try {
     ({
       audit: { id: auditId },
-    } = await (isGbpLink(parsed.data.websiteUrl) ? startAuditFromGbpLink : startAudit)(session.workspace.id, session.user.id, parsed.data));
+    } = await startAudit(session.workspace.id, session.user.id, parsed.data));
   } catch (e) {
     if (e instanceof AuditRequestError) return { fieldErrors: { websiteUrl: [e.message] } };
     return { error: withReference("The audit could not be started. Please try again.", await reportError("audits", e)) };

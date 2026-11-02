@@ -286,25 +286,6 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         >
           <ApiKeyForm provider="PAGESPEED" connected={c.PAGESPEED.hasSecret} disabled={!canEdit} />
         </IntegrationCard>
-        <IntegrationCard
-          title="Google Places (Business Profile)"
-          c={c.PLACES}
-          serverKey={!!process.env.GOOGLE_PLACES_API_KEY?.trim()}
-          canEdit={canEdit}
-          canTest={false}
-          capabilities={[
-            "Fetches the prospect's Google Business Profile: rating, reviews, hours, photos, category",
-            "Checks the position in Google Maps for the main services",
-            "Without it, enter the profile figures by hand on Research → Google Business",
-          ]}
-          steps={
-            <p>
-              console.cloud.google.com → APIs &amp; Services → enable “Places API (New)” → Credentials → Create API key. Google requires a billing account on the project, but the free monthly quota covers normal use (about 1,000 profile lookups and 5,000 searches a month). Your PageSpeed key works too once Places is enabled on its project.
-            </p>
-          }
-        >
-          <ApiKeyForm provider="PLACES" connected={c.PLACES.hasSecret} disabled={!canEdit} />
-        </IntegrationCard>
         {[
           ["Google Search Console", "Client queries, pages, clicks and positions (measured by Google)", "Ask the client for a Performance export (or access), then import Queries.csv / Pages.csv on a prospect's Research page."],
           ["Google Analytics 4", "Conversions from organic search", "Not connected in this version. Ask the client for a GA4 export; KPIs in proposals note that GA4 access is needed."],

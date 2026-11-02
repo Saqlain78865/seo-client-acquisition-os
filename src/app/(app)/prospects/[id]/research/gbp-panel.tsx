@@ -1,8 +1,8 @@
 import { AlertTriangle, ExternalLink, MapPin, MessageSquareWarning, Star } from "lucide-react";
 import { badReviews, gbpIssues, type GbpData } from "@/lib/research/gbp";
 import { formatDate, cn } from "@/lib/utils";
-import { Alert, Badge, Card, CardHeader, EmptyState } from "@/components/ui";
-import { FetchGbpForm, ManualGbpForm } from "./gbp-controls";
+import { Badge, Card, CardHeader, EmptyState } from "@/components/ui";
+import { ManualGbpForm } from "./gbp-controls";
 import { GbpDraftsCard } from "./gbp-drafts";
 
 const SEV_TONE = { CRITICAL: "danger", HIGH: "danger", MEDIUM: "warning", LOW: "neutral" } as const;
@@ -23,7 +23,6 @@ export function GbpPanel({
   domain,
   gbp,
   fetchedAt,
-  placesReady,
   defaultQueries,
 }: {
   prospectId: string;
@@ -31,7 +30,6 @@ export function GbpPanel({
   domain: string;
   gbp: GbpData | null;
   fetchedAt: Date | null;
-  placesReady: boolean;
   defaultQueries: string[];
 }) {
   const issues = gbp ? gbpIssues(gbp, domain) : [];
@@ -43,22 +41,14 @@ export function GbpPanel({
           title="Google Business Profile"
           description="Rating, reviews and Google Maps position — they decide who gets the call in local searches. Findings here go into the proposal's Local SEO and Reputation sections."
         />
-        <div className="grid gap-6 p-5 lg:grid-cols-2">
-          <div className="space-y-3">
-            {!placesReady && (
-              <Alert tone="info" title="Fetching needs the Places API">
-                Enable “Places API (New)” on your Google key (Integrations page). Until then, enter the profile by hand — it takes a minute.
-              </Alert>
-            )}
-            <FetchGbpForm prospectId={prospectId} defaultQueries={defaultQueries} ready={placesReady} />
-          </div>
-          <ManualGbpForm prospectId={prospectId} businessName={businessName} defaultQuery={defaultQueries[0] ?? ""} startOpen={!placesReady && !gbp} />
+        <div className="p-5">
+          <ManualGbpForm prospectId={prospectId} businessName={businessName} defaultQuery={defaultQueries[0] ?? ""} startOpen={!gbp} />
         </div>
       </Card>
 
       {!gbp ? (
         <Card>
-          <EmptyState icon={<MapPin className="h-5 w-5" />} title="No business profile yet" description="Fetch it from Google or enter it by hand to add local SEO and reputation findings to the proposal." />
+          <EmptyState icon={<MapPin className="h-5 w-5" />} title="No business profile yet" description="Copy the figures from their public Google profile (about a minute) to add local SEO and reputation findings to the proposal." />
         </Card>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">

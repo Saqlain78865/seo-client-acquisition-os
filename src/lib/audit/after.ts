@@ -76,14 +76,6 @@ export async function afterAudit(auditId: string) {
       await import("../site-profile").then((m) => m.checkProspectProfile(audit.workspaceId, audit.prospectId)).catch((e) => log.info("technology check failed", { auditId, reason: (e as Error).message }));
     }
 
-    // With a working Places key, the business profile is refreshed so the proposal can include it.
-    if (ok && !audit.batchId && audit.requestedById && (await getApiKey(audit.workspaceId, "PLACES"))) {
-      const recent = await db.gbpProfile.findFirst({ where: { prospectId: audit.prospectId, fetchedAt: { gt: new Date(Date.now() - 14 * 86_400_000) } } });
-      if (!recent) {
-        const { fetchGbpProfile } = await import("../research/service");
-        await fetchGbpProfile(audit.workspaceId, audit.requestedById, audit.prospectId).catch((e) => log.info("business profile not fetched", { auditId, reason: (e as Error).message }));
-      }
-    }
 
     let proposalId: string | null = null;
     if (ok && audit.autoProposal && audit.requestedById) {

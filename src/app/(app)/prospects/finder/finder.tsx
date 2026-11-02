@@ -10,8 +10,7 @@ import { addFoundAction, findProspectsAction } from "./actions";
 
 type Found = FoundBusiness & { prospectId: string | null };
 
-export function Finder({ googleReady }: { googleReady: boolean }) {
-  const [source, setSource] = useState<"OSM" | "GOOGLE">("OSM");
+export function Finder() {
   const [query, setQuery] = useState("");
   const [searched, setSearched] = useState("");
   const [results, setResults] = useState<Found[] | null>(null);
@@ -21,7 +20,7 @@ export function Finder({ googleReady }: { googleReady: boolean }) {
 
   const search = () =>
     start(async () => {
-      const r = await findProspectsAction(query, source);
+      const r = await findProspectsAction(query);
       if (!r.ok) return void toast.error(r.error);
       setResults(r.results);
       setSearched(query);
@@ -41,29 +40,6 @@ export function Finder({ googleReady }: { googleReady: boolean }) {
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="mb-3 flex flex-wrap gap-2 text-sm" role="radiogroup" aria-label="Where to search">
-          {(
-            [
-              ["OSM", "OpenStreetMap — free, no card", true],
-              ["GOOGLE", googleReady ? "Google Places — ratings & reviews" : "Google Places — not available (see above)", googleReady],
-            ] as const
-          ).map(([key, label, ok]) => (
-            <button
-              key={key}
-              type="button"
-              role="radio"
-              aria-checked={source === key}
-              disabled={!ok}
-              onClick={() => {
-                setSource(key);
-                setResults(null);
-              }}
-              className={`rounded-full border px-3 py-1 text-xs disabled:opacity-50 ${source === key ? "border-primary bg-primary-soft text-primary" : "border-border hover:border-primary/40"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
         <form
           className="flex flex-col gap-2 sm:flex-row"
           onSubmit={(e) => {
@@ -73,17 +49,15 @@ export function Finder({ googleReady }: { googleReady: boolean }) {
         >
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="dentist Dubai, plumber Manchester, thai restaurant Brooklyn…" aria-label="Business type and city" className="sm:flex-1" />
           <Button type="submit" disabled={pending || query.trim().length < 3}>
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {pending ? (source === "OSM" ? "Searching the map… (up to 30 s)" : "Searching…") : "Find businesses"}
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {pending ? "Searching the map… (up to 30 s)" : "Find businesses"}
           </Button>
         </form>
         <p className="mt-2 text-xs text-muted">
-          {source === "OSM"
-            ? "Type the business and the city (“dentist Karachi”). OpenStreetMap lists names, phones and websites but no Google ratings — businesses without a website come first. Check their Google profile with the Maps link — OpenStreetMap can miss a website, so confirm before pitching."
-            : "Each search is one Places API request (up to 20 businesses). Google's free monthly allowance for this kind of search is about 1,000 requests."}
+          {"Type the business and the city (“dentist Karachi”). OpenStreetMap lists names, phones and websites but no Google ratings — businesses without a website come first. Check their Google profile with the Maps link — OpenStreetMap can miss a website, so confirm before pitching."}
         </p>
       </Card>
 
-      {results && source === "OSM" && <p className="text-xs text-muted">Map data © OpenStreetMap contributors (ODbL).</p>}
+      {results && <p className="text-xs text-muted">Map data © OpenStreetMap contributors (ODbL).</p>}
       {results && (
         <div className="flex items-center justify-between text-sm">
           <p className="text-muted">

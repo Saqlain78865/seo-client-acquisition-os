@@ -62,3 +62,8 @@ next-env.d.ts
 /desktop/app/icon.png
 /demo-storage
 /verify-storage
+
+# Product tour (scripts/_tour)
+/tour-storage
+/tour.db*
+/tour-out

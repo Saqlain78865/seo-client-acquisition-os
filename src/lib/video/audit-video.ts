@@ -176,6 +176,8 @@ export async function renderVideoFile(script: VideoScript, track: Int16Array | n
     await page.route("**/*", (r) => (r.request().url().startsWith("https://video.leadlift.local/") ? r.fulfill({ contentType: "text/html", body: "<!doctype html><html><body></body></html>" }) : r.request().url().startsWith("data:") ? r.continue() : r.abort()));
     await page.goto("https://video.leadlift.local/");
     await page.addScriptTag({ content: muxer });
+    // Some compilers wrap functions with a __name() helper; the page needs it to run the renderer.
+    await page.evaluate("globalThis.__name = globalThis.__name || ((f) => f)");
     const ok = await page.evaluate(() => typeof VideoEncoder === "function" && typeof AudioEncoder === "function" && "Mp4Muxer" in window);
     if (!ok) throw new AuditVideoError("This browser cannot encode video (WebCodecs is missing).");
     if (track) {

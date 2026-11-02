@@ -81,7 +81,7 @@ describe("lead score", () => {
     expect(scoreLead({ ...base, status: "WON", critical: 5 })).toEqual({ score: 0, reasons: ["Already a client"] });
     expect(scoreLead({ ...base, doNotContact: true, critical: 5 }).score).toBe(0);
     const cold = scoreLead({ ...base, high: 1, lastActivityAt: new Date(Date.now() - 90 * 86400_000) });
-    expect(cold).toEqual({ score: 0, reasons: ["+3 0 critical and 1 high website issues", "-10 No activity for 2 months"] });
+    expect(cold).toEqual({ score: 0, reasons: ["+3 1 high-impact website issue", "-10 No activity for 2 months"] });
   });
 
   it("stores scores for the workspace's prospects", async () => {

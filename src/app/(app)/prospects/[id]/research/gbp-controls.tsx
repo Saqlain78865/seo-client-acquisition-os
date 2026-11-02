@@ -2,38 +2,10 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Loader2, MapPinned, PenLine } from "lucide-react";
+import { ChevronDown, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
-import { fetchGbpAction, saveManualGbpAction } from "./actions";
-
-export function FetchGbpForm({ prospectId, defaultQueries, ready }: { prospectId: string; defaultQueries: string[]; ready: boolean }) {
-  const [queries, setQueries] = useState(defaultQueries.join("\n"));
-  const [pending, start] = useTransition();
-  const router = useRouter();
-  return (
-    <div className="space-y-3">
-      <Field label="Google Maps searches to check (one per line, up to 3)" name="gbpQueries" hint="Where does the business appear on Google Maps for these searches?">
-        <Textarea rows={3} value={queries} onChange={(e) => setQueries(e.target.value)} placeholder="dentist leeds" />
-      </Field>
-      <Button
-        disabled={pending || !ready}
-        title={ready ? undefined : "Add a Google key with the Places API on the Integrations page"}
-        onClick={() =>
-          start(async () => {
-            const r = await fetchGbpAction(prospectId, queries);
-            if (r.ok) {
-              toast.success(r.message);
-              router.refresh();
-            } else toast.error(r.error);
-          })
-        }
-      >
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPinned className="h-4 w-4" />} {pending ? "Fetching from Google…" : "Fetch from Google"}
-      </Button>
-    </div>
-  );
-}
+import { saveManualGbpAction } from "./actions";
 
 const yesNo = (name: string, label: string) => (
   <Field label={label} name={name}>
